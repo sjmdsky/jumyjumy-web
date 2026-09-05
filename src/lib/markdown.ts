@@ -66,6 +66,116 @@ function renderInline(rawText: string): string {
   return result
 }
 
+type TableAlign = 'left' | 'center' | 'right' | null
+
+/**
+ * 清理单个单元格内容：
+ * 将转义的 \| 还原为普通管道符 |，并去除单元格首尾冗余空白。
+ */
+function cleanCell(cell: string): string {
+  return cell.trim().replace(/\\\|/g, '|')
+}
+
+/**
+ * 将表格行切分为单元格。
+ *
+ * 关键规则与边界处理：
+ * 1. 兼容标准 GFM 表格首尾可选的闭合管道符 `|`。
+ * 2. 避免在行内代码块（`...`）内部误切管道符（如命令行示例 `cat file | grep text`）。
+ * 3. 尊重转义的管道符 `\|`，避免因内容中的转义符号导致表格错位。
+ */
+function splitTableRow(line: string): string[] {
+  const trimmed = line.trim()
+  if (!trimmed) return []
+
+  let startIndex = 0
+  if (trimmed.startsWith('|')) {
+    startIndex = 1
+  }
+
+  let endIndex = trimmed.length
+  if (trimmed.endsWith('|')) {
+    // 检查末尾的 | 是否被奇数个反斜杠转义
+    let backslashCount = 0
+    for (let k = trimmed.length - 2; k >= 0 && trimmed[k] === '\\'; k--) {
+      backslashCount++
+    }
+    if (backslashCount % 2 === 0) {
+      endIndex = trimmed.length - 1
+    }
+  }
+
+  const cells: string[] = []
+  let currentCell = ''
+  let inBacktick = false
+  let escaped = false
+
+  for (let idx = startIndex; idx < endIndex; idx++) {
+    const char = trimmed[idx]
+
+    if (escaped) {
+      currentCell += char
+      escaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      escaped = true
+      currentCell += char
+      continue
+    }
+
+    if (char === '`') {
+      inBacktick = !inBacktick
+      currentCell += char
+      continue
+    }
+
+    if (char === '|' && !inBacktick) {
+      cells.push(cleanCell(currentCell))
+      currentCell = ''
+      continue
+    }
+
+    currentCell += char
+  }
+
+  cells.push(cleanCell(currentCell))
+  return cells
+}
+
+/**
+ * 解析表格分隔对齐行（如 `| :--- | :---: | ---: |`）。
+ *
+ * 约束要求：
+ * 每个单元格仅允许包含 `-` 与两侧可选的 `:`。
+ * 任何单元格不符合格式即视为非分隔行，防止普通带有管道符的正文段落被误判为表格。
+ */
+function parseDelimiterRow(line: string): TableAlign[] | null {
+  const cells = splitTableRow(line)
+  if (cells.length === 0) return null
+
+  const aligns: TableAlign[] = []
+  for (const cell of cells) {
+    const match = cell.match(/^(:?)-+(:?)$/)
+    if (!match) {
+      return null
+    }
+    const leftColon = Boolean(match[1])
+    const rightColon = Boolean(match[2])
+    if (leftColon && rightColon) {
+      aligns.push('center')
+    } else if (rightColon) {
+      aligns.push('right')
+    } else if (leftColon) {
+      aligns.push('left')
+    } else {
+      aligns.push(null)
+    }
+  }
+  return aligns
+}
+
 export function renderAnswer(markdown: string | null | undefined): string {
   if (!markdown || !markdown.trim()) {
     return ''
@@ -117,6 +227,65 @@ export function renderAnswer(markdown: string | null | undefined): string {
     if (inCodeBlock) {
       codeBlockLines.push(line)
       continue
+    }
+
+    // 表格解析：当前行为表头且下一行为有效的分隔行
+    if (i + 1 < lines.length && line.includes('|')) {
+      const headerCells = splitTableRow(line)
+      const aligns = parseDelimiterRow(lines[i + 1]!)
+      // 表头与分隔行的列数必须一致，确认为合法 GFM 表格
+      if (headerCells.length > 0 && aligns && headerCells.length === aligns.length) {
+        flushList()
+        const colCount = aligns.length
+        const bodyRows: string[][] = []
+
+        let j = i + 2
+        while (j < lines.length) {
+          const bodyLine = lines[j]!
+          // 遇到空行、代码块、标题、引用块、列表或不含管道符的行，代表表格自然结束
+          if (!bodyLine.trim()) break
+          if (bodyLine.trim().startsWith('```')) break
+          if (bodyLine.match(/^#{1,6}\s+/)) break
+          if (bodyLine.startsWith('>')) break
+          if (bodyLine.match(/^[-*]\s+/)) break
+          if (bodyLine.match(/^\d+\.\s+/)) break
+          if (!bodyLine.includes('|')) break
+
+          bodyRows.push(splitTableRow(bodyLine))
+          j++
+        }
+
+        const headerHtml = headerCells
+          .map((text, idx) => {
+            const align = aligns[idx]
+            const alignStyle = align ? ` style="text-align: ${align};"` : ''
+            return `        <th${alignStyle}>${renderInline(text)}</th>`
+          })
+          .join('\n')
+
+        const bodyHtml = bodyRows
+          .map((row) => {
+            const cellsHtml = Array.from({ length: colCount }, (_, idx) => {
+              const text = row[idx] || ''
+              const align = aligns[idx]
+              const alignStyle = align ? ` style="text-align: ${align};"` : ''
+              return `        <td${alignStyle}>${renderInline(text)}</td>`
+            }).join('\n')
+            return `      <tr>\n${cellsHtml}\n      </tr>`
+          })
+          .join('\n')
+
+        const tbodyPart = bodyRows.length > 0
+          ? `\n    <tbody>\n${bodyHtml}\n    </tbody>`
+          : ''
+
+        output.push(
+          `<div class="table-container">\n  <table>\n    <thead>\n      <tr>\n${headerHtml}\n      </tr>\n    </thead>${tbodyPart}\n  </table>\n</div>`
+        )
+
+        i = j - 1
+        continue
+      }
     }
 
     // 标题处理 #, ##, ###, ####, #####, ######

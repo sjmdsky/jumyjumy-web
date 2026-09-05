@@ -660,6 +660,79 @@ const schemaJsonLd = {
     color: var(--color-text-primary);
   }
 
+  /* 表格排版 (Table) 现代化极简精修 */
+  .answer-body :global(.table-container) {
+    width: 100%;
+    margin: 2rem 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg);
+    box-shadow: var(--shadow-sm);
+  }
+
+  .answer-body :global(.table-container::-webkit-scrollbar) {
+    height: 6px;
+  }
+
+  .answer-body :global(.table-container::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  .answer-body :global(.table-container::-webkit-scrollbar-thumb) {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+  }
+
+  .answer-body :global(.table-container::-webkit-scrollbar-thumb:hover) {
+    background: var(--color-border-hover);
+  }
+
+  .answer-body :global(table) {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    line-height: 1.65;
+    text-align: left;
+    border-spacing: 0;
+  }
+
+  .answer-body :global(thead) {
+    background-color: var(--color-bg-subtle);
+    border-bottom: 1.5px solid var(--color-border);
+  }
+
+  .answer-body :global(th) {
+    padding: 0.85rem 1.15rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    border: none;
+  }
+
+  .answer-body :global(td) {
+    padding: 0.9rem 1.15rem;
+    border-bottom: 1px solid var(--color-border);
+    color: var(--color-text-primary);
+    vertical-align: top;
+  }
+
+  .answer-body :global(tbody tr:last-child td) {
+    border-bottom: none;
+  }
+
+  .answer-body :global(tbody tr) {
+    transition: background-color 0.15s ease;
+  }
+
+  .answer-body :global(tbody tr:hover) {
+    background-color: var(--color-bg-subtle);
+  }
+
   /* 权威参考来源区域（次要信息，紧凑低噪排版） */
   .sources-section {
     margin-top: 3rem;
@@ -864,6 +937,22 @@ const schemaJsonLd = {
     .answer-body :global(pre) {
       padding: 1rem 1.1rem;
       font-size: 0.875rem;
+    }
+
+    .answer-body :global(.table-container) {
+      margin: 1.4rem 0;
+      border-radius: var(--radius-sm);
+    }
+
+    .answer-body :global(th) {
+      padding: 0.65rem 0.85rem;
+      font-size: 0.75rem;
+    }
+
+    .answer-body :global(td) {
+      padding: 0.75rem 0.85rem;
+      font-size: 0.875rem;
+      line-height: 1.55;
     }
 
     .sources-section {

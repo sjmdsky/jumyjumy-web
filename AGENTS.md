@@ -48,8 +48,9 @@ jumyjumy-web/
 │   │   ├── __tests__/      # Vitest 单元测试
 │   │   ├── api.ts          # 后端契约：URL 构造、信封解包与词汇翻译、载荷校验、规范路径判定、取数
 │   │   ├── slug.ts         # URL 生成、路径编码与 base36 id 解析
-│   │   ├── markdown.ts     # 默认转义、防 XSS 的 Markdown 渲染器
+│   │   ├── markdown.ts     # 默认转义、防 XSS 的 Markdown 渲染器（支持 GFM 表格与排版）
 │   │   ├── json-ld.ts      # 结构化数据内联转义（防 </script> 逃逸）
+│   │   ├── datetime.ts     # 时间戳格式化工具（支持访客本地时区）
 │   │   └── types.ts        # 领域数据模型定义
 │   ├── pages/              # Astro 路由（index.astro, q/[slugId].astro）
 │   └── styles/             # 全局极简 CSS 变量与 Typography 样式
@@ -94,7 +95,7 @@ jumyjumy-web/
 ### 4.3 安全基线：后端投毒防线
 后端返回的一切内容都是不可信输入。以下三道防线不得削弱：
 1. `sources[].uri` 在 `parseQuestionPayload` 中翻译为 `url` 的同时做协议白名单（仅 http/https）——详情页把它原样写进 `<a href>`，这是唯一防线。
-2. 答案正文一律经 `renderAnswer` 渲染，严禁把原始 Markdown 交给 `set:html`。
+2. 答案正文一律经 `renderAnswer` 渲染（包括 GFM 表格与各单元格内容），严禁把原始 Markdown 交给 `set:html`。
 3. 结构化数据一律经 `toInlineJsonLd`，严禁裸用 `JSON.stringify`。后者会让载荷中的 `</script>` 提前闭合 `<script type="application/ld+json">`，其后内容按 HTML 解析，构成完整注入点。
 
 ### 4.4 数据只读不可变 (`types.ts`)

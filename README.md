@@ -100,7 +100,7 @@ src/
 │   ├── api.ts                    backend contract: URL building, envelope parsing,
 │   │                             validation, canonical redirects, fetch
 │   ├── slug.ts                   /q/<slug>-<id> parsing, canonical paths, path encoding
-│   ├── markdown.ts               escape-by-default markdown renderer
+│   ├── markdown.ts               escape-by-default markdown renderer (GFM tables, code, links)
 │   ├── json-ld.ts                safe inlining of structured data
 │   ├── datetime.ts               timestamp formatting, shared by server and client
 │   └── types.ts                  the domain model — every field readonly
