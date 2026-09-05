@@ -53,7 +53,7 @@ Everything stays inside the Workers API surface (`crypto.subtle`, `fetch`, `Text
 ## Requirements
 
 - **Node.js 22+** — required by `wrangler` (Astro itself accepts 18.20.8+)
-- A backend serving the [JSON contract](#backend-contract) below
+- A backend serving the JSON API this frontend expects — the contract is documented in `CLAUDE.md`
 
 ## Getting started
 
@@ -92,35 +92,6 @@ One variable: `API_BASE_URL`, the root of the backend JSON API. It is declared i
 
 The value is deliberately absent from `wrangler.jsonc`. `vars` there is plaintext, and this repository is public.
 
-## Backend contract
-
-Not included here. Any service that answers `GET <API_BASE_URL>/q/<segment>` with this envelope will work:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "1xwndu4p7c",
-    "fingerprint": "41d1…",
-    "query": "how to enable bbr on debian 13",
-    "text": "…markdown…",
-    "sources": [{ "title": "…", "uri": "https://…" }],
-    "status": "ready",
-    "createdAt": 1788052974592,
-    "updatedAt": 1788052974592
-  },
-  "error": null
-}
-```
-
-`<segment>` resolves in three steps, and the frontend's HTTP semantics depend on all three:
-
-1. Shaped like `<slug>-<id>` — no whitespace, and after the last `-` an id of one `[0-9]` followed by 9–11 `[0-9a-z]` — is **looked up by id**. A hit returns the stored record *without* calling the model, so an indexed page stays reachable while the model is rate-limited. A miss is **404**: a crawler-invented URL must not mint a page or burn a model call.
-2. Anything else is validated as a question. Empty or overlong is **400**, which the frontend maps to `notFound` rather than `error` — such a URL can never come to exist, so a 502 would only make crawlers retry a dead link forever.
-3. A fingerprint hit — whitespace folded, lowercased — returns the stored record. This is the dedup. Only a real miss calls the model, stores the result, and returns it.
-
-The id is derived from the fingerprint of the normalized query rather than generated randomly, so the same question always resolves to the same id even after the store is lost.
-
 ## Project layout
 
 ```
@@ -142,16 +113,6 @@ src/
 ```
 
 Domain modules are pure and side-effect free; I/O is injected rather than imported, which is what keeps them testable and runtime-agnostic. Each one defends a specific constraint, explained in its header comment.
-
-## Security invariants
-
-Everything the backend returns is untrusted input. Three defences exist and must not be weakened:
-
-1. **`sources[].uri` is protocol-allowlisted** to `http`/`https` as it becomes `sources[].url`, because the answer page writes it straight into an `href`.
-2. **Answer bodies go through `renderAnswer`**, never `set:html` with raw markdown. Raw HTML is escaped — inside code fences too — and `javascript:` links degrade to plain text.
-3. **Structured data goes through `toInlineJsonLd`**, never bare `JSON.stringify`. A `</script>` anywhere in backend text would otherwise close the tag early and let the remainder parse as HTML.
-
-The API route at `src/pages/api/q/[segment].ts` returns only the canonical path, never the answer body, so all three defences stay server-side rather than being reimplemented in the browser. The client validates that the returned path starts with `/q/` before calling `location.replace` — the endpoint is ours, but a redirect target read out of a response body is an open redirect if left unchecked.
 
 ## Tests
 
