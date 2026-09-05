@@ -1,0 +1,54 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "jumyjumy-web",
+
+  // astro build 的产物路径，由 @astrojs/cloudflare 固定写死（build.server +
+  // build.serverEntry），改 astro.config.mjs 的 outDir 时这里要跟着改。
+  "main": "./dist/_worker.js/index.js",
+
+  // 与本地 workerd 版本对齐，这样 wrangler dev 不会因为「日期比运行时新」
+  // 而降级并刷警告。往前挪日期属于运行时行为变更，要单独验证，不要顺手改。
+  "compatibility_date": "2026-01-14",
+  // Astro 的 SSR 产物会引用少量 node: 内建（如 node:async_hooks）。
+  // 站点自己的 src/ 不用 Node API，但这个 flag 是跑通框架产物的前提。
+  "compatibility_flags": ["nodejs_compat"],
+
+  // dist/ 同时是静态资源目录：请求先查资源，未命中才唤醒 Worker。
+  // 首页是 prerender 的，因此走资源层、不消耗 Worker 调用；/q/* 才进 SSR。
+  // _worker.js / _routes.json 不会被自动排除（那是 Pages 的行为），
+  // 靠 public/.assetsignore 挡住，否则服务端 bundle 会被当静态文件公开。
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./dist"
+  },
+
+  // 规范域名。canonical、JSON-LD 里的 url 都以 astro.config.mjs 的 site 为准，
+  // 两处必须一致，否则收录的地址和实际服务的地址会对不上。
+  "routes": [{ "pattern": "www.jumyjumy.com", "custom_domain": true }],
+
+  // 关掉 workers.dev 子域：它会用另一个主机名提供同一批页面，对搜索引擎就是
+  // 重复内容。canonical 指向 www 能兜底，但少一个可抓取的重复源更干净。
+  "workers_dev": false,
+
+  // API_BASE_URL 不落在这个文件里。仓库公开后，vars 是明文的：把后端源站写在
+  // 这里，等于把一个无鉴权、每次调用都消耗模型额度的入口贴到公网上。改由 secret
+  // 提供，两条路径都会被适配器按请求拷进 process.env，供 astro:env/server 读取：
+  //   线上         wrangler secret put API_BASE_URL
+  //   wrangler dev  写进 .dev.vars（已在 .gitignore 内，不会被提交）
+  // 两者都没配时，回落到 astro.config.mjs schema 里的 default（http://localhost:3000），
+  // 于是 /q/* 全部 502——这是配置缺失的预期表现，不是 bug。
+
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true
+    }
+  }
+}

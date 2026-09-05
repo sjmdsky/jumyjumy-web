@@ -1,0 +1,506 @@
+---
+/**
+ * 骨架页：URL 仍是 /q/<提问原文>，由 [slugId].astro 通过 Astro.rewrite 渲染到这里。
+ *
+ * 原始提问段在后端要走「调模型 -> 落库 -> 返回」的慢路径，阻塞 SSR 等它等于把
+ * 首字节时间押在模型延迟上，超时就是 502——一次正常提问不该看到错误页。
+ * 所以这一页立即 200 返回，把等待交给浏览器；拿到规范路径后 location.replace
+ * 过去，答案仍由 /q/<slug>-<id> 的 SSR 页渲染。
+ *
+ * 必须 noindex：此刻页面没有任何答案内容，被收录就是一条空页。真正可索引的是
+ * 跳转后的规范页。
+ */
+import BaseLayout from '../../../layouts/BaseLayout.astro'
+import Logo from '../../../components/Logo.astro'
+import { encodePath } from '../../../lib/slug'
+
+const query = Astro.params.query ?? ''
+
+// 规范 URL 显式给出，不依赖 Astro.url——rewrite 之后 pathname 是重写后的内部路径。
+const requestedUrl = new URL(encodePath(`/q/${query}`), Astro.site || 'https://example.com').href
+
+// 骨架页的内容随时会变成答案页，不允许任何一层缓存。
+Astro.response.headers.set('cache-control', 'private, no-store')
+---
+
+<BaseLayout title={`${query} — JumyJumy`} description={query} noindex={true} canonicalUrl={requestedUrl}>
+  <header class="detail-header">
+    <div class="header-inner">
+      <a href="/" class="brand-link" aria-label="JumyJumy Home">
+        <Logo size="header" />
+      </a>
+
+      <form class="header-search-form" action="#" method="GET">
+        <div class="header-input-group">
+          <input
+            type="text"
+            name="q"
+            class="header-search-input"
+            value={query}
+            required
+            autocomplete="off"
+            aria-label="Ask or edit question"
+          />
+          <button type="submit" class="header-submit-btn" aria-label="Submit revised question">
+            <svg
+              class="header-arrow-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14"></path>
+              <path d="m12 5 7 7-7 7"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <main class="detail-container" data-pending-root data-query={query}>
+    <article class="qa-article">
+      <header class="article-header">
+        <h1 class="question-title">{query}</h1>
+      </header>
+
+      <!-- 等待态：aria-live 让屏幕阅读器在状态切换时收到通知 -->
+      <section class="pending-state" data-state="loading" aria-live="polite" aria-busy="true">
+        <p class="state-label">
+          <span class="spinner" aria-hidden="true"></span>
+          Generating answer…
+        </p>
+        <p class="state-hint">Searching sources and drafting. This usually takes 10–30 seconds.</p>
+        <div class="skeleton-block" aria-hidden="true">
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line short"></span>
+          <span class="skeleton-line"></span>
+          <span class="skeleton-line short"></span>
+        </div>
+      </section>
+
+      <section class="pending-state" data-state="notFound" aria-live="polite" hidden>
+        <p class="state-label">No answer could be created for this question.</p>
+        <p class="state-hint">It may be empty, too long, or something we cannot answer. Try rewording it above.</p>
+        <a href="/" class="state-link">← Return to Search</a>
+      </section>
+
+      <section class="pending-state" data-state="error" aria-live="polite" hidden>
+        <p class="state-label">Something went wrong while generating this answer.</p>
+        <p class="state-hint">The service may be busy. You can try again.</p>
+        <div class="state-actions">
+          <button type="button" class="retry-btn" data-retry>Try again</button>
+          <a href="/" class="state-link">← Return to Search</a>
+        </div>
+      </section>
+    </article>
+  </main>
+
+  <footer class="detail-footer">
+    <div class="footer-inner">
+      <a href="/" class="back-home-link">← Return to Search</a>
+    </div>
+  </footer>
+</BaseLayout>
+
+<script>
+  // 客户端超时略长于服务端的 90s，让端点有机会先回一个干净的 502。
+  const TIMEOUT_MS = 100_000
+
+  const root = document.querySelector<HTMLElement>('[data-pending-root]')
+  const query = root?.dataset['query'] ?? ''
+
+  function showState(name: 'loading' | 'notFound' | 'error'): void {
+    document.querySelectorAll<HTMLElement>('.pending-state').forEach((section) => {
+      section.hidden = section.dataset['state'] !== name
+    })
+  }
+
+  /**
+   * 只接受本站 /q/ 开头的相对路径。端点是自家的，但 location.replace 的目标
+   * 一旦能被响应体左右就是开放重定向；'//evil.com' 这类协议相对 URL 也被这条挡掉。
+   */
+  function readCanonicalPath(payload: unknown): string | null {
+    if (typeof payload !== 'object' || payload === null) return null
+    const envelope = payload as Record<string, unknown>
+    if (envelope['success'] !== true) return null
+
+    const data = envelope['data']
+    if (typeof data !== 'object' || data === null) return null
+
+    const path = (data as Record<string, unknown>)['path']
+    return typeof path === 'string' && path.startsWith('/q/') ? path : null
+  }
+
+  async function resolveQuestion(): Promise<void> {
+    if (!query) {
+      showState('notFound')
+      return
+    }
+
+    showState('loading')
+
+    let response: Response
+    try {
+      response = await fetch(`/api/q/${encodeURIComponent(query)}`, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })
+    } catch {
+      // 网络中断或超时。不静默吞掉——给出可重试的错误态。
+      showState('error')
+      return
+    }
+
+    if (response.status === 404) {
+      showState('notFound')
+      return
+    }
+
+    if (!response.ok) {
+      showState('error')
+      return
+    }
+
+    let payload: unknown
+    try {
+      payload = await response.json()
+    } catch {
+      showState('error')
+      return
+    }
+
+    const path = readCanonicalPath(payload)
+    if (!path) {
+      showState('error')
+      return
+    }
+
+    // replace 而不是 assign：骨架页不该留在浏览器历史里，返回时不会退回到转圈的页面。
+    window.location.replace(path)
+  }
+
+  document.querySelector<HTMLButtonElement>('[data-retry]')?.addEventListener('click', () => {
+    void resolveQuestion()
+  })
+
+  const form = document.querySelector<HTMLFormElement>('.header-search-form')
+  const input = document.querySelector<HTMLInputElement>('.header-search-input')
+  if (form && input) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      const next = input.value.trim()
+      if (!next) return
+      window.location.href = `/q/${encodeURIComponent(next)}`
+    })
+  }
+
+  void resolveQuestion()
+</script>
+
+<style>
+  .detail-header {
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+
+  .header-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  .brand-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text-primary);
+    user-select: none;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .brand-link:hover {
+    opacity: 0.85;
+  }
+
+  .header-search-form {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .header-input-group {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 500px;
+    background-color: var(--color-bg-subtle);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-full);
+    padding: 0.4rem 0.65rem 0.4rem 1.15rem;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .header-input-group:hover {
+    border-color: var(--color-border-hover);
+  }
+
+  .header-input-group:focus-within {
+    border-color: var(--color-border-focus);
+    background-color: var(--color-bg-input);
+    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .header-input-group:focus-within {
+      box-shadow: 0 0 0 3px rgba(243, 244, 246, 0.12);
+    }
+  }
+
+  .header-search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-size: 0.925rem;
+    font-weight: 450;
+    color: var(--color-text-primary);
+    outline: none;
+    padding: 0.15rem 0;
+  }
+
+  .header-submit-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin-left: 0.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    transition: color 0.18s ease, transform 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .header-submit-btn:hover {
+    color: var(--color-text-primary);
+    transform: translateX(2px);
+  }
+
+  .header-arrow-icon {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  .detail-container {
+    flex: 1;
+    max-width: 760px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+
+  .qa-article {
+    width: 100%;
+  }
+
+  .article-header {
+    margin-bottom: 2.5rem;
+  }
+
+  .question-title {
+    font-size: clamp(2rem, 4.5vw, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.25;
+    color: var(--color-text-primary);
+  }
+
+  .state-label {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .state-hint {
+    font-size: 0.925rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 2rem;
+  }
+
+  .state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1.25rem;
+  }
+
+  .state-link {
+    font-size: 0.925rem;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    transition: opacity 0.15s ease;
+  }
+
+  .state-link:hover {
+    opacity: 0.75;
+  }
+
+  .retry-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.925rem;
+    font-weight: 550;
+    color: var(--color-bg);
+    background-color: var(--color-text-primary);
+    border: none;
+    border-radius: var(--radius-full);
+    padding: 0.55rem 1.35rem;
+    transition: opacity 0.15s ease;
+  }
+
+  .retry-btn:hover {
+    opacity: 0.85;
+  }
+
+  /* 转圈指示器 */
+  .spinner {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--color-border-hover);
+    border-top-color: var(--color-text-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* 骨架条：给出答案大致的版面重量，避免跳转时的剧烈位移 */
+  .skeleton-block {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .skeleton-line {
+    display: block;
+    height: 1.05rem;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-subtle) 25%,
+      var(--color-border) 37%,
+      var(--color-bg-subtle) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+  }
+
+  .skeleton-line.short {
+    width: 62%;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0 50%;
+    }
+  }
+
+  /* 尊重系统的减少动画偏好 */
+  @media (prefers-reduced-motion: reduce) {
+    .spinner,
+    .skeleton-line {
+      animation: none;
+    }
+  }
+
+  .detail-footer {
+    border-top: 1px solid var(--color-border);
+    padding: 2rem 1.5rem;
+  }
+
+  .footer-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+  }
+
+  .back-home-link {
+    color: var(--color-text-primary);
+    font-weight: 500;
+    transition: opacity 0.15s ease;
+  }
+
+  .back-home-link:hover {
+    opacity: 0.75;
+  }
+
+  @media (max-width: 640px) {
+    .header-inner {
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+
+    .brand-link {
+      font-size: 1.15rem;
+    }
+
+    .header-input-group {
+      padding: 0.3rem 0.5rem 0.3rem 0.85rem;
+    }
+
+    .detail-container {
+      padding: 2rem 1.25rem 3.5rem;
+    }
+
+    .question-title {
+      font-size: 1.75rem;
+    }
+
+    .footer-inner {
+      flex-direction: column;
+      gap: 0.75rem;
+      text-align: center;
+    }
+  }
+</style>

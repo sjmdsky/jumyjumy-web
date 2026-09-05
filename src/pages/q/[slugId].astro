@@ -1,0 +1,885 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro'
+import Logo from '../../components/Logo.astro'
+import { buildPath, isIdLookupSegment } from '../../lib/slug'
+import { renderAnswer } from '../../lib/markdown'
+import { fetchQuestion, resolveCanonicalRedirect } from '../../lib/api'
+import { toInlineJsonLd } from '../../lib/json-ld'
+import { formatTimestamp } from '../../lib/datetime'
+import { API_BASE_URL } from 'astro:env/server'
+
+const slugId = Astro.params.slugId ?? ''
+
+// 不是「按 id 查」的段，就是一句原始提问：后端要调模型，慢到足以把 SSR 拖成 502。
+// 改渲染骨架页（rewrite 不改 URL），把等待交给浏览器，答案生成后再跳规范路径。
+// 判定必须用 isIdLookupSegment 而非 parseSlugId——后者不排空白，与后端的分流规则不符。
+if (!isIdLookupSegment(slugId)) {
+  return Astro.rewrite(`/q/pending/${encodeURIComponent(slugId)}`)
+}
+
+// 请求时向后端取数：/q/<query> -> <API_BASE_URL>/q/<query>
+//
+// 透传访客的 UA：Worker 的出站 fetch 默认不带这个头，而后端把「无 UA」判定
+// 为爬虫。不带就等于告诉后端每一位访客都是爬虫，访问量一个都记不上。
+const result = await fetchQuestion(API_BASE_URL, slugId, {
+  userAgent: Astro.request.headers.get('user-agent'),
+})
+
+// 问题不存在必须发真 404。返回 200 空页就是 soft 404，会拖累全站抓取预算。
+if (result.kind === 'notFound') {
+  return new Response(null, { status: 404 })
+}
+
+// 后端故障与「不存在」严格区分：502 让搜索引擎稍后重试，不会把已收录页面剔出索引。
+if (result.kind === 'error') {
+  console.error(`[q/${slugId}] ${result.message}`)
+  return new Response('Upstream unavailable', { status: 502 })
+}
+
+const question = result.question
+
+// slug 过期（标题改过）或首页跳来的原始提问文本 -> 301 到规范路径，外链权重不丢。
+const canonicalRedirect = resolveCanonicalRedirect(slugId, question)
+if (canonicalRedirect) {
+  return Astro.redirect(canonicalRedirect, 301)
+}
+
+const canonicalPath = buildPath(question.title, question.id)
+const canonicalUrl = new URL(canonicalPath, Astro.site || 'https://example.com').href
+// 默认信任答案质量：不做长度/来源/时效门禁。
+// 仍然排除两类页面——尚未生成答案的 pending，以及人工降级的 demoted。
+const indexable = question.status === 'ready' && !question.demoted
+
+// 只有已就绪且可索引的页面允许被边缘缓存，用以抵消 SSR 的 TTFB 代价；
+// pending / demoted 状态随时可能翻转，必须每次回源。
+Astro.response.headers.set(
+  'cache-control',
+  indexable ? 'public, s-maxage=60, stale-while-revalidate=600' : 'private, no-store',
+)
+
+const renderedContent = renderAnswer(question.answerMarkdown)
+
+// 服务端渲染 UTC，客户端脚本再换成访客本地时区（见 lib/datetime.ts）。
+const updatedIso = new Date(question.updatedAt).toISOString()
+const updatedLabel = formatTimestamp(question.updatedAt)
+
+// Schema.org QAPage 结构化数据
+const schemaJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'QAPage',
+  mainEntity: {
+    '@type': 'Question',
+    name: question.title,
+    text: question.title,
+    answerCount: 1,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: question.answerMarkdown,
+      url: canonicalUrl,
+      datePublished: new Date(question.createdAt).toISOString(),
+      dateModified: new Date(question.updatedAt).toISOString(),
+    },
+  },
+}
+---
+
+<BaseLayout
+  title={`${question.title} — JumyJumy`}
+  description={question.title}
+  noindex={!indexable}
+  canonicalUrl={canonicalUrl}
+>
+  <!-- Schema.org JSON-LD for Google Rich Results -->
+  <script is:inline type="application/ld+json" set:html={toInlineJsonLd(schemaJsonLd)} />
+
+  <header class="detail-header">
+    <div class="header-inner">
+      <a href="/" class="brand-link" aria-label="JumyJumy Home">
+        <Logo size="header" />
+      </a>
+
+      <!-- 顶部更长更舒适的搜索框，预填充当前问题标题方便编辑修改 -->
+      <form class="header-search-form" action="#" method="GET">
+        <div class="header-input-group">
+          <input
+            type="text"
+            name="q"
+            class="header-search-input"
+            value={question.title}
+            required
+            autocomplete="off"
+            aria-label="Ask or edit question"
+          />
+          <button type="submit" class="header-submit-btn" aria-label="Submit revised question">
+            <svg
+              class="header-arrow-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14"></path>
+              <path d="m12 5 7 7-7 7"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <main class="detail-container">
+    <article class="qa-article">
+      <header class="article-header">
+        <h1 class="question-title">{question.title}</h1>
+        <div class="meta-row">
+          <span class="meta-label">Updated</span>
+          <time datetime={updatedIso} data-local-time>{updatedLabel}</time>
+          {question.tags && question.tags.length > 0 && (
+            <>
+              <span class="meta-dot">·</span>
+              <div class="tag-list">
+                {question.tags.map((tag) => (
+                  <span class="tag-pill">{tag}</span>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </header>
+
+      <div class="answer-body" set:html={renderedContent} />
+
+      {question.sources.length > 0 && (
+        <section class="sources-section">
+          <h2 class="sources-title">Sources & References</h2>
+          <ol class="sources-list">
+            {question.sources.map((source) => (
+              <li class="source-item">
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="nofollow noopener"
+                  class="source-link"
+                >
+                  <span class="source-title">{source.title}</span>
+                  <svg class="external-icon" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                    <polyline points="15 3 21 3 21 9"></polyline>
+                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                  </svg>
+                </a>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </article>
+  </main>
+
+  <footer class="detail-footer">
+    <div class="footer-inner">
+      <a href="/" class="back-home-link">← Return to Search</a>
+    </div>
+  </footer>
+</BaseLayout>
+
+<script>
+  import { formatTimestamp } from '../../lib/datetime'
+
+  // 服务端渲染的是 UTC（同一份 HTML 才能进边缘缓存）。这里换成访客本地时区；
+  // 权威值始终是 datetime 属性里的 ISO 瞬时值，脚本只改人读的那一份。
+  const localZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  document.querySelectorAll<HTMLTimeElement>('time[data-local-time]').forEach((el) => {
+    const ms = Date.parse(el.dateTime)
+    if (Number.isNaN(ms)) return
+    el.textContent = formatTimestamp(ms, localZone)
+  })
+
+  const form = document.querySelector('.header-search-form') as HTMLFormElement | null
+  const input = document.querySelector('.header-search-input') as HTMLInputElement | null
+
+  if (form && input) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const query = input.value.trim()
+      if (!query) return
+
+      // 直接把原始提问放进路径。该 URL 不是 id 形态，服务端立即回骨架页，
+      // 由浏览器等后端解析（指纹去重 / 新建），再 replace 到 /q/<slug>-<id>。
+      window.location.href = `/q/${encodeURIComponent(query)}`
+    })
+  }
+</script>
+
+<style>
+  /* 顶部极简导航条 */
+  .detail-header {
+    border-bottom: 1px solid var(--color-border);
+    background-color: var(--color-bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(8px);
+  }
+
+  .header-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+  }
+
+  .brand-link {
+    display: inline-flex;
+    align-items: center;
+    color: var(--color-text-primary);
+    user-select: none;
+    transition: opacity 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .brand-link:hover {
+    opacity: 0.85;
+  }
+
+  /* 顶部宽幅搜索框 */
+  .header-search-form {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  .header-input-group {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 500px;
+    background-color: var(--color-bg-subtle);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-full);
+    padding: 0.4rem 0.65rem 0.4rem 1.15rem;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .header-input-group:hover {
+    border-color: var(--color-border-hover);
+  }
+
+  .header-input-group:focus-within {
+    border-color: var(--color-border-focus);
+    background-color: var(--color-bg-input);
+    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .header-input-group:focus-within {
+      box-shadow: 0 0 0 3px rgba(243, 244, 246, 0.12);
+    }
+  }
+
+  .header-search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-size: 0.925rem;
+    font-weight: 450;
+    color: var(--color-text-primary);
+    outline: none;
+    padding: 0.15rem 0;
+  }
+
+  .header-search-input::placeholder {
+    color: var(--color-text-placeholder);
+    font-size: 0.85rem;
+  }
+
+  .header-submit-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 0;
+    margin-left: 0.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    transition: color 0.18s ease, transform 0.18s ease;
+    flex-shrink: 0;
+  }
+
+  .header-submit-btn:hover {
+    color: var(--color-text-primary);
+    transform: translateX(2px);
+  }
+
+  .header-arrow-icon {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  /* 核心主体内容区 */
+  .detail-container {
+    flex: 1;
+    max-width: 760px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  .qa-article {
+    width: 100%;
+  }
+
+  .article-header {
+    margin-bottom: 2.5rem;
+    padding-bottom: 1.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .question-title {
+    font-size: clamp(2rem, 4vw + 0.3rem, 2.75rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.22;
+    color: var(--color-text-primary);
+    margin-bottom: 1.15rem;
+    text-wrap: balance;
+    word-break: break-word;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    font-size: 0.8125rem;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+  }
+
+  .meta-label {
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-secondary);
+  }
+
+  .meta-row time {
+    color: var(--color-text-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .meta-dot {
+    color: var(--color-border-hover);
+    user-select: none;
+  }
+
+  .tag-list {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .tag-pill {
+    font-size: 0.75rem;
+    font-weight: 550;
+    letter-spacing: 0.01em;
+    padding: 0.18rem 0.6rem;
+    border-radius: var(--radius-full);
+    background-color: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .tag-pill:hover {
+    border-color: var(--color-border-hover);
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-input);
+  }
+
+  /* 渲染答案主体排版 */
+  .answer-body {
+    font-size: 1.125rem;
+    line-height: 1.82;
+    color: var(--color-text-primary);
+    word-break: break-word;
+  }
+
+  .answer-body :global(h1),
+  .answer-body :global(h2),
+  .answer-body :global(h3),
+  .answer-body :global(h4),
+  .answer-body :global(h5),
+  .answer-body :global(h6) {
+    color: var(--color-text-primary);
+    letter-spacing: -0.025em;
+    line-height: 1.3;
+    font-weight: 700;
+    text-wrap: balance;
+  }
+
+  .answer-body :global(h1) {
+    font-size: 1.65rem;
+    margin-top: 2.75rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .answer-body :global(h2) {
+    font-size: 1.45rem;
+    margin-top: 2.5rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .answer-body :global(h3) {
+    font-size: 1.25rem;
+    margin-top: 2.15rem;
+    margin-bottom: 0.65rem;
+    font-weight: 650;
+  }
+
+  .answer-body :global(h4) {
+    font-size: 1.1rem;
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+  }
+
+  .answer-body :global(p) {
+    margin-bottom: 1.45rem;
+  }
+
+  .answer-body :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  /* 列表排版 (ul / ol / li) 现代化精修 */
+  .answer-body :global(ul),
+  .answer-body :global(ol) {
+    margin: 1.5rem 0;
+    padding-left: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  /* 无序列表 (ul li) - 微光箭头 / 角标 (Minimal Chevron) */
+  .answer-body :global(ul li) {
+    position: relative;
+    padding-left: 1.5rem;
+    line-height: 1.75;
+    color: var(--color-text-primary);
+  }
+
+  .answer-body :global(ul li::before) {
+    content: '';
+    position: absolute;
+    left: 0.25rem;
+    top: 0.7em;
+    width: 5.5px;
+    height: 5.5px;
+    border-top: 1.75px solid var(--color-border-hover);
+    border-right: 1.75px solid var(--color-border-hover);
+    transform: rotate(45deg);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .answer-body :global(ul li:hover::before) {
+    border-color: var(--color-text-primary);
+    transform: translateX(3px) rotate(45deg);
+  }
+
+  /* 二级嵌套无序列表 */
+  .answer-body :global(ul ul),
+  .answer-body :global(ol ul) {
+    margin: 0.45rem 0 0.2rem;
+    gap: 0.45rem;
+  }
+
+  .answer-body :global(ul ul li::before) {
+    left: 0.3rem;
+    width: 4.5px;
+    height: 4.5px;
+    border-width: 1.25px;
+    border-color: var(--color-border);
+  }
+
+  .answer-body :global(ul ul li:hover::before) {
+    border-color: var(--color-text-secondary);
+    transform: translateX(2px) rotate(45deg);
+  }
+
+  /* 有序列表 (ol li) */
+  .answer-body :global(ol) {
+    counter-reset: ol-counter;
+  }
+
+  .answer-body :global(ol li) {
+    counter-increment: ol-counter;
+    position: relative;
+    padding-left: 2.1rem;
+    line-height: 1.75;
+    color: var(--color-text-primary);
+  }
+
+  .answer-body :global(ol li::before) {
+    content: counter(ol-counter);
+    position: absolute;
+    left: 0;
+    top: 0.2em;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: var(--radius-full);
+    background-color: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 0.75rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .answer-body :global(ol li:hover::before) {
+    border-color: var(--color-border-hover);
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-input);
+  }
+
+  /* 二级嵌套有序列表 */
+  .answer-body :global(ol ol),
+  .answer-body :global(ul ol) {
+    margin: 0.45rem 0 0.2rem;
+    gap: 0.45rem;
+  }
+
+  .answer-body :global(blockquote) {
+    border-left: 3.5px solid var(--color-text-primary);
+    padding: 1rem 1.35rem;
+    margin: 1.85rem 0;
+    background-color: var(--color-bg-subtle);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    color: var(--color-text-secondary);
+    font-style: normal;
+  }
+
+  .answer-body :global(blockquote p) {
+    margin-bottom: 0.75rem;
+    color: inherit;
+  }
+
+  .answer-body :global(blockquote p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .answer-body :global(pre) {
+    background-color: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 1.2rem 1.4rem;
+    overflow-x: auto;
+    margin: 1.85rem 0;
+    font-family: var(--font-mono);
+    font-size: 0.925rem;
+    line-height: 1.65;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .answer-body :global(pre::-webkit-scrollbar) {
+    height: 6px;
+  }
+
+  .answer-body :global(pre::-webkit-scrollbar-track) {
+    background: transparent;
+  }
+
+  .answer-body :global(pre::-webkit-scrollbar-thumb) {
+    background: var(--color-border);
+    border-radius: var(--radius-full);
+  }
+
+  .answer-body :global(pre::-webkit-scrollbar-thumb:hover) {
+    background: var(--color-border-hover);
+  }
+
+  .answer-body :global(code) {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background-color: var(--color-bg-subtle);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.18em 0.42em;
+    color: var(--color-text-primary);
+  }
+
+  .answer-body :global(pre code) {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    border-radius: 0;
+  }
+
+  .answer-body :global(a) {
+    color: var(--color-text-primary);
+    text-decoration: underline;
+    text-decoration-color: var(--color-border-hover);
+    text-underline-offset: 3.5px;
+    text-decoration-thickness: 1.5px;
+    transition: text-decoration-color 0.18s ease, opacity 0.18s ease;
+  }
+
+  .answer-body :global(a:hover) {
+    text-decoration-color: var(--color-text-primary);
+    opacity: 0.85;
+  }
+
+  .answer-body :global(strong) {
+    font-weight: 650;
+    color: var(--color-text-primary);
+  }
+
+  /* 权威参考来源区域（次要信息，紧凑低噪排版） */
+  .sources-section {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .sources-title {
+    font-size: 0.75rem;
+    font-weight: 650;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.75rem;
+  }
+
+  .sources-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    counter-reset: source-counter;
+  }
+
+  .source-item {
+    counter-increment: source-counter;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background-color: var(--color-bg-subtle);
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+
+  .source-item:hover {
+    border-color: var(--color-border-hover);
+    background-color: var(--color-bg-input);
+  }
+
+  .source-link {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.75rem;
+    color: inherit;
+    text-decoration: none;
+    width: 100%;
+  }
+
+  .source-link::before {
+    content: counter(source-counter);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: var(--radius-full);
+    background-color: var(--color-border);
+    color: var(--color-text-secondary);
+    font-size: 0.6875rem;
+    font-weight: 550;
+    flex-shrink: 0;
+    margin-top: 0;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .source-item:hover .source-link::before {
+    background-color: var(--color-text-primary);
+    color: var(--color-bg);
+  }
+
+  .source-title {
+    font-size: 0.8125rem;
+    font-weight: 450;
+    line-height: 1.4;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+    flex: 1;
+    transition: color 0.15s ease;
+  }
+
+  .source-item:hover .source-title {
+    color: var(--color-text-primary);
+  }
+
+  .external-icon {
+    opacity: 0.45;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+    flex-shrink: 0;
+  }
+
+  .source-item:hover .external-icon {
+    opacity: 0.9;
+    transform: translate(1px, -1px);
+  }
+
+  /* 页尾 */
+  .detail-footer {
+    border-top: 1px solid var(--color-border);
+    padding: 2rem 1.5rem;
+  }
+
+  .footer-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+  }
+
+  .back-home-link {
+    color: var(--color-text-primary);
+    font-weight: 500;
+    transition: opacity 0.15s ease;
+  }
+
+  .back-home-link:hover {
+    opacity: 0.75;
+  }
+
+  @media (max-width: 640px) {
+    .header-inner {
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+
+    .brand-link {
+      font-size: 1.15rem;
+    }
+
+    .header-input-group {
+      padding: 0.3rem 0.5rem 0.3rem 0.85rem;
+    }
+
+    .detail-container {
+      padding: 2.25rem 1.15rem 4rem;
+    }
+
+    .article-header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.25rem;
+    }
+
+    .question-title {
+      font-size: 1.75rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .meta-row {
+      font-size: 0.775rem;
+      gap: 0.4rem;
+    }
+
+    .answer-body {
+      font-size: 1.05rem;
+      line-height: 1.75;
+    }
+
+    .answer-body :global(h1) {
+      font-size: 1.5rem;
+      margin-top: 2.25rem;
+    }
+
+    .answer-body :global(h2) {
+      font-size: 1.3rem;
+      margin-top: 2rem;
+    }
+
+    .answer-body :global(h3) {
+      font-size: 1.15rem;
+      margin-top: 1.75rem;
+    }
+
+    .answer-body :global(ul li) {
+      padding-left: 1.35rem;
+    }
+
+    .answer-body :global(ul li::before) {
+      left: 0.2rem;
+      top: 0.68em;
+      width: 5px;
+      height: 5px;
+      border-width: 1.5px;
+    }
+
+    .answer-body :global(ol li) {
+      padding-left: 1.9rem;
+    }
+
+    .answer-body :global(ol li::before) {
+      width: 1.25rem;
+      height: 1.25rem;
+      font-size: 0.7rem;
+      top: 0.25em;
+    }
+
+    .answer-body :global(pre) {
+      padding: 1rem 1.1rem;
+      font-size: 0.875rem;
+    }
+
+    .sources-section {
+      margin-top: 2.25rem;
+      padding-top: 1.25rem;
+    }
+
+    .source-link {
+      padding: 0.35rem 0.6rem;
+      gap: 0.5rem;
+    }
+
+    .footer-inner {
+      flex-direction: column;
+      gap: 0.75rem;
+      text-align: center;
+    }
+  }
+</style>

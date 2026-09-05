@@ -1,0 +1,13 @@
+# 上传静态资源时要排除的构建产物（Cloudflare Workers Assets 读取此文件）。
+# 放在 public/ 而不是 dist/：dist/ 每次 astro build 都会重建，写在那里会被抹掉；
+# public/ 的内容会被原样拷进 dist/，因此这份规则能跟着每次构建走。
+#
+# _worker.js —— SSR 服务端 bundle。它必须待在 assets 目录里（wrangler.jsonc 的
+# main 指向它），但绝不能当作公开静态文件对外提供：实测不排除时
+# GET /_worker.js/index.js 会返回 200，把整个服务端代码泄露出去。
+# Workers 不会自动排除它（那是 Pages 的行为），只能靠这个文件。
+_worker.js
+
+# _routes.json —— 适配器为 Pages 生成的路由过滤表，在 Workers 上不被读取，
+# 对外暴露只会白白泄露路由结构。
+_routes.json

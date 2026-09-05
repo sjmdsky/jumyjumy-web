@@ -1,0 +1,169 @@
+---
+/**
+ * JumyJumy 品牌矢量 SVG LOGO 组件
+ *
+ * 基于日落余晖 (Sunset Glow) 视觉渐变设计：
+ * - 两个大写 "J" 采用琥珀金-暖橙-珊瑚橙-日落红的日落光泽渐变
+ * - "umy" 继承主题文本主色 (--color-text-primary)
+ * - 亮色模式与暗色模式分别适配高对比度专属色谱
+ * - 提供 hero（首页大标题）、header（顶部导航栏）与 default 尺寸规范
+ */
+export type Props = {
+  as?: 'h1' | 'span' | 'div' | 'p'
+  size?: 'hero' | 'header' | 'default'
+  class?: string
+  'aria-label'?: string
+}
+
+const {
+  as: Tag = 'span',
+  size = 'default',
+  class: className = '',
+  'aria-label': ariaLabel = 'JumyJumy',
+} = Astro.props
+---
+
+<Tag class:list={['brand-logo', `brand-logo--${size}`, className]} aria-label={ariaLabel}>
+  <span class="sr-only">JumyJumy</span>
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 460 110"
+    class="brand-logo-svg"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <defs>
+      <!-- 亮色模式日落渐变 -->
+      <linearGradient id="sunset_j1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f59e0b" />
+        <stop offset="55%" stop-color="#f97316" />
+        <stop offset="100%" stop-color="#fb7185" />
+      </linearGradient>
+      <linearGradient id="sunset_j2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#f97316" />
+        <stop offset="50%" stop-color="#fb7185" />
+        <stop offset="100%" stop-color="#f43f5e" />
+      </linearGradient>
+      <!-- 暗色模式日落渐变 -->
+      <linearGradient id="dark_sunset_j1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fbbf24" />
+        <stop offset="55%" stop-color="#fb923c" />
+        <stop offset="100%" stop-color="#f43f5e" />
+      </linearGradient>
+      <linearGradient id="dark_sunset_j2" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#fb923c" />
+        <stop offset="50%" stop-color="#f43f5e" />
+        <stop offset="100%" stop-color="#fb7185" />
+      </linearGradient>
+    </defs>
+    <text
+      x="50%"
+      y="78"
+      text-anchor="middle"
+      class="brand-logo-text"
+      font-size="78"
+      font-weight="850"
+      letter-spacing="-2px"
+    >
+      <tspan class="brand-logo-j1">J</tspan><tspan class="brand-logo-umy">umy</tspan><tspan class="brand-logo-j2">J</tspan><tspan class="brand-logo-umy">umy</tspan>
+    </text>
+  </svg>
+</Tag>
+
+<style>
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .brand-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    line-height: 1;
+    vertical-align: middle;
+  }
+
+  .brand-logo-svg {
+    display: block;
+    height: 100%;
+    width: auto;
+    max-width: 100%;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), filter 0.2s ease;
+  }
+
+  .brand-logo-text {
+    font-family: var(--font-brand, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif);
+  }
+
+  /* 亮色模式文字与渐变填充 */
+  .brand-logo-j1 {
+    fill: url(#sunset_j1);
+  }
+
+  .brand-logo-j2 {
+    fill: url(#sunset_j2);
+  }
+
+  .brand-logo-umy {
+    fill: var(--color-text-primary, #111827);
+    transition: fill 0.15s ease;
+  }
+
+  /* 暗色模式专属高对比度渐变 */
+  @media (prefers-color-scheme: dark) {
+    .brand-logo-j1 {
+      fill: url(#dark_sunset_j1);
+    }
+
+    .brand-logo-j2 {
+      fill: url(#dark_sunset_j2);
+    }
+
+    .brand-logo-umy {
+      fill: var(--color-text-primary, #f8fafc);
+    }
+  }
+
+  /* 尺寸规格 */
+  .brand-logo--hero {
+    height: clamp(56px, 12vw, 92px);
+    width: auto;
+    max-width: 100%;
+    margin-bottom: 0.85rem;
+  }
+
+  .brand-logo--header {
+    height: 30px;
+    width: auto;
+  }
+
+  .brand-logo--default {
+    height: 24px;
+    width: auto;
+  }
+
+  /* 悬浮微交互 */
+  :global(.brand-link:hover) .brand-logo-svg {
+    filter: brightness(1.1);
+    transform: translateY(-0.5px);
+  }
+
+  @media (max-width: 640px) {
+    .brand-logo--hero {
+      height: clamp(48px, 14vw, 68px);
+    }
+
+    .brand-logo--header {
+      height: 26px;
+    }
+  }
+</style>

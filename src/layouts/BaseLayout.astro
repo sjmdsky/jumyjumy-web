@@ -1,0 +1,44 @@
+---
+import '../styles/global.css'
+
+interface Props {
+  title?: string
+  description?: string
+  noindex?: boolean
+  canonicalUrl?: string
+}
+
+const {
+  title = 'JumyJumy — AI Agent Search',
+  description = 'A minimalist, high-performance Q&A platform built for clear answers.',
+  noindex = false,
+  canonicalUrl,
+} = Astro.props
+
+const resolvedCanonical = canonicalUrl || new URL(Astro.url.pathname, Astro.site || 'https://example.com').href
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    {noindex && <meta name="robots" content="noindex, nofollow" />}
+    <link rel="canonical" href={resolvedCanonical} />
+
+    <!-- Open Graph / SEO -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={resolvedCanonical} />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

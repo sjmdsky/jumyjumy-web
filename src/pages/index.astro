@@ -1,0 +1,231 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro'
+import Logo from '../components/Logo.astro'
+
+// 首页无动态数据，预渲染成静态 HTML（SSR 模式下按路由 opt-in）
+export const prerender = true
+---
+
+<BaseLayout
+  title="JumyJumy — AI Agent Search"
+  description="A minimalist, high-performance Q&A search engine built for clear, authoritative answers."
+>
+  <main class="home-container">
+    <div class="search-wrapper">
+      <header class="brand">
+        <Logo as="h1" size="hero" class="brand-title" aria-label="JumyJumy" />
+        <p class="brand-tagline">AI Agent Search</p>
+      </header>
+
+      <form class="ask-form" action="#" method="GET">
+        <div class="input-group">
+          <input
+            type="text"
+            name="q"
+            class="search-input"
+            required
+            autocomplete="off"
+            autofocus
+            aria-label="Ask a question"
+          />
+          <button type="submit" class="submit-btn" aria-label="Submit question">
+            <svg
+              class="arrow-icon"
+              viewBox="0 0 24 24"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 12h14"></path>
+              <path d="m12 5 7 7-7 7"></path>
+            </svg>
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+</BaseLayout>
+
+<script>
+  const form = document.querySelector('.ask-form') as HTMLFormElement | null
+  const input = document.querySelector('.search-input') as HTMLInputElement | null
+
+  if (form && input) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault()
+      const query = input.value.trim()
+      if (!query) return
+
+      // 提问原文直接进路径。这个 URL 不是 id 形态，服务端会立即回一个骨架页，
+      // 由浏览器等后端出结果，再 replace 到 /q/<slug>-<id>。
+      // 指纹去重仍由后端负责——命中已有问题时直接返回既有记录，
+      // 不重复生成答案（省 token）且不产生 doorway page。
+      window.location.href = `/q/${encodeURIComponent(query)}`
+    })
+  }
+</script>
+
+<style>
+  .home-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 2.5rem 1.5rem;
+  }
+
+  .search-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    max-width: 680px;
+    margin-top: -7vh; /* Optical vertical center */
+  }
+
+  .brand {
+    text-align: center;
+    margin-bottom: 2.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 核心视觉锚点：绝对第一视觉焦点 */
+  .brand-title {
+    display: inline-flex;
+    justify-content: center;
+    margin-bottom: 0.85rem;
+    user-select: none;
+  }
+
+  .brand-tagline {
+    font-size: clamp(1.05rem, 2.2vw, 1.2rem);
+    font-weight: 450;
+    color: var(--color-text-secondary);
+    letter-spacing: -0.015em;
+    line-height: 1.4;
+  }
+
+  .ask-form {
+    width: 100%;
+  }
+
+  /* 紧凑精致的搜索条（高度约 46px），收敛视觉重量以保证上方 LOGO 的第一聚焦点地位 */
+  .input-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: 46px;
+    background-color: var(--color-bg-input);
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-full);
+    box-shadow: var(--shadow-sm);
+    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    padding: 0.3rem 0.65rem 0.3rem 1.35rem;
+  }
+
+  .input-group:hover {
+    border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-md);
+  }
+
+  .input-group:focus-within {
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08), var(--shadow-md);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .input-group:focus-within {
+      box-shadow: 0 0 0 3px rgba(243, 244, 246, 0.12), var(--shadow-md);
+    }
+  }
+
+  .search-input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-size: clamp(1rem, 1.6vw, 1.0625rem);
+    line-height: 1.4;
+    color: var(--color-text-primary);
+    outline: none;
+    padding: 0.2rem 0;
+    margin-right: 0.5rem;
+  }
+
+  /* 彻底重置原生按钮样式，实现完全透明无框右箭头 */
+  .submit-btn {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    outline: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    color: var(--color-text-secondary);
+    transition: color 0.18s ease, transform 0.18s ease;
+  }
+
+  .submit-btn:hover {
+    color: var(--color-text-primary);
+    transform: translateX(3px);
+  }
+
+  .submit-btn:active {
+    transform: translateX(1px) scale(0.95);
+  }
+
+  .arrow-icon {
+    display: block;
+    width: 18px;
+    height: 18px;
+    stroke-width: 2;
+    stroke: currentColor;
+    fill: none;
+  }
+
+
+  @media (max-width: 640px) {
+    .search-wrapper {
+      margin-top: -4vh;
+    }
+
+    .brand {
+      margin-bottom: 1.75rem;
+    }
+
+    .input-group {
+      min-height: 42px;
+      padding: 0.25rem 0.5rem 0.25rem 1.1rem;
+    }
+
+    .submit-btn {
+      width: 26px;
+      height: 26px;
+    }
+
+    .arrow-icon {
+      width: 16px;
+      height: 16px;
+    }
+  }
+</style>
