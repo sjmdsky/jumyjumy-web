@@ -1,164 +1,267 @@
+<div align="center">
+
 # jumyjumy-web
 
-**[jumyjumy.com](https://www.jumyjumy.com) is an AI Agent Search.** You ask a question in plain language; an agent researches it and returns one clear, sourced answer. Every answer becomes a real page at its own permanent URL — indexable, linkable, and stable enough to cite.
+**High-performance, SEO-first frontend for AI Agent Search.**
 
-This repository is the **frontend**: the Astro application that renders those pages and owns their HTTP semantics. The agent that produces the answers is a separate backend service and is not part of this repository.
+[English](README.md) • [简体中文](README.zh-CN.md)
+
+<br />
+
+[![Astro](https://img.shields.io/badge/Astro-5.x-BC52EE?style=flat-square&logo=astro&logoColor=white)](https://astro.build/)
+[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers-F38020?style=flat-square&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vitest](https://img.shields.io/badge/Vitest-3.x-6E9F18?style=flat-square&logo=vitest&logoColor=white)](https://vitest.dev/)
+[![License](https://img.shields.io/badge/License-All_Rights_Reserved-red?style=flat-square)](#license)
+
+</div>
 
 ---
 
-## How it works
+## 📖 Overview
 
-Two page types, and nothing else:
+**[jumyjumy.com](https://www.jumyjumy.com)** is an AI Agent Search platform. Users ask a question in natural language; an autonomous agent performs research and produces a single, well-sourced, authoritative answer. Every answer is published at a permanent, stable URL — indexable by search engines, citeable, and linkable.
 
-1. **The ask box** (`/`) — a single input, prerendered to static HTML.
-2. **The answer page** (`/q/<slug>-<id>`) — the canonical, indexable page for one question.
+This repository hosts the **frontend**: an Astro application running on Cloudflare Workers that handles server-side rendering (SSR), HTTP semantics, and strict security boundaries. The AI agent that researches and synthesizes answers lives in a separate backend service.
 
-A third route exists but is not a page type: a `noindex` skeleton that the detail route rewrites to while an answer is still being generated.
+---
 
+## ✨ Key Highlights
+
+- **⚡ Edge-Native SSR**: Powered by Cloudflare Workers for sub-millisecond edge routing and ultra-fast global delivery.
+- **🎯 SEO & Indexation Precision**: Emits strictly truthful HTTP status codes (`200`, `301`, `404`, `502`) to optimize Google crawl budget and protect link equity.
+- **⏳ Zero-Latency Skeleton Routing**: New model queries instantly render a `noindex` skeleton on the client side, isolating TTFB from AI generation latency and stopping search bots from triggering costly LLM runs.
+- **🛡️ Defense-in-Depth Security**: Strict protocol whitelisting (`http`/`https` only), default-escaped Markdown parsing, and script-tag injection guards on JSON-LD structured data.
+- **📦 Pure Domain Core**: `src/lib/` is completely pure, dependency-free, runtime-agnostic, and thoroughly unit-tested.
+
+---
+
+## 🔄 How It Works
+
+The site consists of two user-facing page types:
+
+1. **The Ask Box** (`/`) — A minimalist, centered query interface prerendered to static HTML at the edge.
+2. **The Answer Page** (`/q/<slug>-<id>`) — The canonical, indexable document for a specific question.
+
+A transitional route also exists: a lightweight `noindex` skeleton that the router renders while a brand-new answer is being synthesized.
+
+### Request Lifecycle & Routing
+
+```text
+1. Canonical Question Flow (Direct or Crawled):
+   Browser ──GET /q/<slug>-<id>──> [ Astro SSR ] ──GET /q/<slug>-<id>──> [ Backend API ]
+                                         │                                      │
+                                         ├─ 200 OK (Rendered HTML) <────────────┘
+                                         ├─ 301 Moved Permanently (Slug retitled / Canonical)
+                                         ├─ 404 Not Found (Question nonexistent)
+                                         └─ 502 Bad Gateway (Backend failure)
+
+2. Raw Question Flow (User submitting a new prompt):
+   Browser ──GET /q/<raw-query>──> [ Astro SSR ] (Internal rewrite to noindex skeleton)
+      │                                  │
+      │                                  └─ 200 OK (Instant skeleton, URL unchanged)
+      │
+      ├── Immediate UI: Loading skeleton rendered; client-side polling starts
+      └── Client Fetch ──GET /api/q/<raw-query>──> [ Astro SSR ] ──> [ Backend API ]
+                                                         │                  │
+                                                         └── 200 { path } ──┘
+                                                                 │
+      Client: location.replace(path) ────────────────────────────┘
+      (Redirects to permanent canonical URL)
 ```
-browser  GET /q/<slug>-<id>            (canonical, id-lookup shape)
-   -> Astro SSR   GET <API_BASE_URL>/q/<slug>-<id>   [JSON]
-   -> 200 rendered | 301 canonical | 404 | 502
 
-browser  GET /q/<raw question>         (anything else — the agent must run)
-   -> Astro rewrites to the skeleton, 200 immediately, URL unchanged
-   -> browser  GET /api/q/<raw question>
-        -> Astro SSR   GET <API_BASE_URL>/q/<raw question>   [JSON]
-        -> 200 {path} -> location.replace(path) -> the canonical page above
-        -> 404 | 502  -> the skeleton's own not-found / retry state
-```
+> [!NOTE]
+> **Why decouple raw question rendering?**
+> A new question requires upstream LLM inference. Blocking SSR on inference would tether Time-To-First-Byte (TTFB) directly to model latency. Slow responses or timeouts would surface as `502` errors for valid queries. 
+> By immediately serving a `noindex` skeleton:
+> 1. Real visitors experience immediate visual feedback while polling asynchronously.
+> 2. Web crawlers (which do not execute JavaScript) never execute polling scripts, eliminating unnecessary model consumption and saving crawl budget.
 
-A raw question means a model call. Blocking the server render on that would put TTFB at the mercy of model latency, and a slow or failed call would surface as a 502 on a perfectly valid question. Handing the browser an immediate `noindex` skeleton moves the wait client-side. It also means crawlers — which never run the script — stop triggering model calls at all, which is a crawl-budget and cost win as much as a latency one.
+---
 
-## Why server-side rendering
+## ⚡ Why Server-Side Rendering (SSR)?
 
-`output: 'server'` is deliberate, not a stepping stone toward a static build. Three things depend on it, none of which a static build can do:
+Using `output: 'server'` is an intentional architectural requirement. A static site generator (`getStaticPaths()`) fundamentally cannot satisfy these requirements:
 
-- **Real status codes.** Retitling a question changes its slug, so the stale URL must `301` onto the canonical path or its link equity is lost. A question that does not exist must be a real `404`; answering `200` with an empty page is a soft 404 and burns crawl budget.
-- **Pages that exist before the next build.** Users mint new questions continuously. `getStaticPaths()` would freeze the page set at build time.
-- **Per-request index decisions.** `status` and `demoted` flip over time; a static build bakes `noindex` into the HTML until the next deploy.
+- **True Status Codes & Canonical Redirects**: Updating a title changes the slug. Old URLs must issue a permanent `301 Moved Permanently` to pass link equity. Non-existent queries must return a genuine `404 Not Found`; returning a `200` with an empty state constitutes a *soft 404*, which harms crawl budget.
+- **Dynamic Content Lifecycle**: Answers are generated continuously on demand. Static generation would freeze available pages to build time.
+- **Per-Request Indexing Signals**: Question state (`status`, `demoted`) can change at any moment. SSR allows dynamic toggling of `<meta name="robots" content="noindex">` on every request without requiring a full redeployment.
 
-## Stack
+---
 
-| | |
-| :--- | :--- |
-| Framework | Astro 5, `output: 'server'` |
-| Runtime | Cloudflare Workers, via `@astrojs/cloudflare` |
-| Language | TypeScript — `astro/tsconfigs/strict` plus `verbatimModuleSyntax` |
-| Tests | Vitest |
-| Runtime dependencies | none beyond the above; `src/lib/` is dependency-free |
+## 🛠️ Tech Stack
 
-Everything stays inside the Workers API surface (`crypto.subtle`, `fetch`, `TextEncoder`, `Intl.*`). The `nodejs_compat` flag in `wrangler.jsonc` is there for Astro's own SSR bundle, not licence to reach for Node built-ins in `src/`.
+| Component | Technology | Description |
+| :--- | :--- | :--- |
+| **Framework** | [Astro 5](https://astro.build/) | `output: 'server'` with Cloudflare adapter |
+| **Runtime** | [Cloudflare Workers](https://workers.cloudflare.com/) | `@astrojs/cloudflare` (12.x pinned) |
+| **Language** | [TypeScript 5](https://www.typescriptlang.org/) | Strict mode with `verbatimModuleSyntax` |
+| **Testing** | [Vitest](https://vitest.dev/) | Unit tests in pure Node environment |
+| **Dependencies** | None (Zero Runtime) | `src/lib/` has 0 external runtime dependencies |
 
-## Requirements
+> [!IMPORTANT]
+> All code must stay strictly within the Cloudflare Workers runtime API (`fetch`, `crypto.subtle`, `TextEncoder`, `Intl.*`). Do not import Node.js built-ins (`fs`, `path`, etc.) into `src/`. The `nodejs_compat` flag in `wrangler.jsonc` is strictly for Astro's internal SSR bundle.
 
-- **Node.js 22+** — required by `wrangler` (Astro itself accepts 18.20.8+)
-- A backend serving the JSON API this frontend expects — the contract is documented in `CLAUDE.md`
+---
 
-## Getting started
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js 22+** (required by `wrangler`; Astro itself supports 18.20.8+)
+- Backend API running or accessible (contract detailed below)
+
+### Quick Start
 
 ```bash
+# 1. Clone the repository and install dependencies
+git clone https://github.com/sjmdsky/jumyjumy-web.git
+cd jumyjumy-web
 npm install
-cp .env.example .env      # point API_BASE_URL at your backend
-npm run dev               # http://localhost:4321
+
+# 2. Configure environment variables
+cp .env.example .env
+# Edit .env to set API_BASE_URL (and optional GATEWAY_TOKEN)
+
+# 3. Start local development server
+npm run dev
+# Server running at http://localhost:4321
 ```
 
-With no backend reachable on `API_BASE_URL`, `/` still returns 200 because it is prerendered, and every `/q/*` returns 502.
+> [!TIP]
+> When running without an active backend, `/` returns `200` (prerendered static asset), while `/q/*` routes return `502 Bad Gateway`. This is expected behavior indicating missing backend connectivity.
 
-### Commands
+### Command Reference
 
-| Command | What it does |
+| Command | Action |
 | :--- | :--- |
-| `npm run dev` | Astro dev server on `:4321`, reads `.env` |
-| `npm run build` | build to `dist/` |
-| `npm run preview` | run the built Worker in workerd — build first |
-| `npm run deploy` | build and ship to Cloudflare Workers |
-| `npm run check` | `astro check` — TypeScript and `.astro` diagnostics |
-| `npm test` | Vitest, single pass |
-| `npm run test:watch` | Vitest in watch mode |
+| `npm run dev` | Starts local dev server at `localhost:4321` (reads `.env`) |
+| `npm run build` | Builds the client assets and Worker bundle to `dist/` |
+| `npm run preview` | Runs production bundle locally using `wrangler dev` (workerd) |
+| `npm run deploy` | Builds and deploys directly to Cloudflare Workers |
+| `npm run check` | Runs `astro check` for TypeScript and `.astro` diagnostics |
+| `npm test` | Runs all Vitest unit tests |
+| `npm run test:watch` | Starts Vitest in interactive watch mode |
 
-## Configuration
+---
 
-Declared in `astro.config.mjs` through `astro:env` and read by pages via `astro:env/server`:
+## ⚙️ Configuration & Secrets
 
-| Variable | Required | Description |
-| :--- | :--- | :--- |
-| `API_BASE_URL` | No (defaults to `http://localhost:3000`) | Root URL of the backend JSON API. |
-| `GATEWAY_TOKEN` | No (optional) | Shared secret with the backend (`x-gateway-token`), gating `/q/` requests and endorsing visitor IP forwarding. |
+Environment variables are declared in `astro.config.mjs` via `astro:env` and consumed in server code via `astro:env/server`:
 
-Resolution sources:
+| Variable | Required | Default | Description |
+| :--- | :---: | :--- | :--- |
+| `API_BASE_URL` | No | `http://localhost:3000` | Base URL of backend JSON API. |
+| `GATEWAY_TOKEN` | No | *None* | Shared secret sent via `x-gateway-token` to authenticate gateway and visitor IP forwarding. |
 
-| Mode | Source |
+### Environment Resolution
+
+| Mode / Environment | Configuration Source |
 | :--- | :--- |
 | `astro dev` / `astro build` | `.env` |
-| `wrangler dev` | `.dev.vars` |
-| deployed Worker | `wrangler secret put <NAME>` |
-| nothing set | schema default (`API_BASE_URL`), or omitted (`GATEWAY_TOKEN`) |
+| `wrangler dev` (Local preview) | `.dev.vars` (ignores `.env`) |
+| Production Cloudflare Worker | `wrangler secret put <NAME>` |
+| Unset Fallback | Schema default (`API_BASE_URL`), or omitted (`GATEWAY_TOKEN`) |
 
-`access: 'secret'` in the schema is a functional choice, not a secrecy claim: it is the only setting that resolves values **at runtime**. `access: 'public'` would inline them into the build output, so switching environments would mean rebuilding.
+> [!NOTE]
+> `access: 'secret'` in `astro.config.mjs` is a functional mechanism rather than a secrecy label: it is the only mode that reads values at **runtime** from `process.env`. Using `access: 'public'` would bake values into the build output, forcing a rebuild across environments.
+> 
+> Neither key is stored in `wrangler.jsonc` `vars` because that configuration is committed in plain text.
 
-Neither value is stored in `wrangler.jsonc`. `vars` there is plaintext, and this repository is public.
+---
 
-## Project layout
+## 📂 Project Structure
 
+```text
+jumyjumy-web/
+├── public/
+│   ├── .assetsignore             # CRITICAL: Excludes _worker.js from public static assets
+│   ├── favicon.svg               # Site icon
+│   └── robots.txt                # Crawler directives
+├── src/
+│   ├── components/               # Brand & shared UI components (Logo.astro, etc.)
+│   ├── layouts/                  # Base layout, HTML skeleton, SEO meta, JSON-LD
+│   ├── lib/                      # Pure domain layer (100% testable, zero side effects)
+│   │   ├── __tests__/            # Vitest unit test suites
+│   │   ├── api.ts                # Backend contract, envelope parsing, validation, fetch
+│   │   ├── slug.ts               # /q/<slug>-<id> parser, base36 IDs, canonical URL logic
+│   │   ├── markdown.ts           # Safe GFM markdown renderer with table support
+│   │   ├── json-ld.ts            # Safe inline JSON-LD generator (anti-XSS)
+│   │   ├── datetime.ts           # Client & server unified timestamp formatter
+│   │   └── types.ts              # Readonly domain type definitions
+│   ├── pages/
+│   │   ├── index.astro           # The ask box (prerendered static HTML)
+│   │   ├── q/[slugId].astro      # Canonical answer page (SSR)
+│   │   ├── q/pending/[query].astro # Transitional noindex skeleton
+│   │   └── api/q/[segment].ts    # Client polling endpoint for skeleton
+│   └── styles/                   # Minimal typography and CSS variable tokens
+├── astro.config.mjs              # Astro configuration + astro:env schema
+├── package.json                  # Dependencies and build scripts
+├── tsconfig.json                 # TypeScript strict configuration
+├── vitest.config.ts              # Vitest test runner configuration
+└── wrangler.jsonc                # Cloudflare Workers configuration
 ```
-src/
-├── lib/                          pure, dependency-free domain logic — the tested layer
-│   ├── api.ts                    backend contract: URL building, envelope parsing,
-│   │                             validation, canonical redirects, fetch
-│   ├── slug.ts                   /q/<slug>-<id> parsing, canonical paths, path encoding
-│   ├── markdown.ts               escape-by-default markdown renderer (GFM tables, code, links)
-│   ├── json-ld.ts                safe inlining of structured data
-│   ├── datetime.ts               timestamp formatting, shared by server and client
-│   └── types.ts                  the domain model — every field readonly
-├── pages/
-│   ├── index.astro               the ask box, prerendered
-│   ├── q/[slugId].astro          the answer page
-│   ├── q/pending/[query].astro   the noindex skeleton
-│   └── api/q/[segment].ts        the endpoint the skeleton polls
-├── layouts/ · components/ · styles/
-```
 
-Domain modules are pure and side-effect free; I/O is injected rather than imported, which is what keeps them testable and runtime-agnostic. Each one defends a specific constraint, explained in its header comment.
+---
 
-## Tests
+## 🧪 Testing & Quality Assurance
 
 ```bash
+# Run test suite
 npm test
+
+# Target a specific module
 npx vitest run src/lib/__tests__/slug.test.ts
+
+# Target a specific test pattern
 npx vitest run -t 'escapes < so an embedded </script> cannot close the tag'
-npx vitest run --coverage        # scoped to src/lib/**
+
+# Collect coverage report (scoped to src/lib/**)
+npx vitest run --coverage
 ```
 
-Vitest collects `src/**/*.test.ts` in a `node` environment. There is no jsdom or component-test setup, so `.astro` files are never covered — logic that needs a test belongs in `src/lib/`.
+- **Pure Unit Testing**: Vitest runs in Node.js without `jsdom` overhead.
+- **Architectural Separation**: `.astro` files are never touched by Vitest; any business logic requiring verification is housed in `src/lib/`.
+- **AAA Pattern**: Tests strictly follow Arrange-Act-Assert with descriptive, behavior-driven names (e.g., `'returns error instead of throwing when the backend is unreachable'`).
 
-Tests follow Arrange-Act-Assert with behavior-describing names, for example `'returns error instead of throwing when the backend is unreachable'`.
+---
 
-## Deployment
+## 🚢 Deployment to Cloudflare Workers
 
-Cloudflare Workers, configured in `wrangler.jsonc`. `npm run deploy` builds and ships.
-
-The build splits in two, and `wrangler.jsonc` names both halves:
-
-- `dist/_worker.js/index.js` — the SSR entry (`main`)
-- everything else in `dist/` — static assets (`assets.directory`)
-
-A request matches the asset layer first and only falls through to the Worker on a miss, so the prerendered homepage never wakes it.
-
-`public/.assetsignore` is load-bearing, not tidiness. The server bundle sits *inside* the assets directory, and Workers does **not** exclude `_worker.js` automatically the way Pages did — without that file, `GET /_worker.js/index.js` returns 200 and serves the whole server bundle. It lives in `public/` rather than `dist/` because `astro build` rebuilds `dist/` from scratch on every run.
-
-To deploy to your own account, change `name` and `routes` in `wrangler.jsonc` and `site` in `astro.config.mjs`, then configure the backend URL and optional gateway token secrets:
+Deployments run via `wrangler` on Cloudflare Workers:
 
 ```bash
-wrangler secret put API_BASE_URL
-wrangler secret put GATEWAY_TOKEN    # optional: shared secret for backend gateway auth
 npm run deploy
 ```
 
-## License
+The build output splits into two parts configured in `wrangler.jsonc`:
+1. `dist/_worker.js/index.js` — The SSR entrypoint (`main`).
+2. `dist/` (static directory) — Static client assets (`assets.directory`).
 
-**All rights reserved.** Copyright © 2026 jumyjumy.com
+> [!IMPORTANT]
+> **The role of `public/.assetsignore`:**
+> In Workers, static assets take precedence over Worker routing. The server code (`_worker.js`) resides inside the output asset directory. Without `public/.assetsignore`, Cloudflare Workers serves `GET /_worker.js/index.js` as a static file, leaking the entire server-side bundle! It resides in `public/` so Astro retains it across builds.
 
-This source is published for reading and reference only. No licence is granted to use, copy, modify, or redistribute it, and commercial use of any kind is not permitted. The sole exception is what GitHub's [Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service) already grant every user of a public repository: viewing the code, and forking it within GitHub.
+### Self-Hosting Instructions
 
-Issues and questions are welcome. Pull requests are not being accepted, because no licence is in place to cover contributed code. If you want to do anything beyond reading, please open an issue and ask.
+1. Update `name` and `routes` in [wrangler.jsonc](file:///home/debian/workspace/jumyjumy-web/wrangler.jsonc).
+2. Update `site` URL in [astro.config.mjs](file:///home/debian/workspace/jumyjumy-web/astro.config.mjs).
+3. Set your production secrets on Cloudflare:
+   ```bash
+   wrangler secret put API_BASE_URL
+   wrangler secret put GATEWAY_TOKEN    # Optional: shared secret for gateway auth
+   ```
+4. Deploy:
+   ```bash
+   npm run deploy
+   ```
+
+---
+
+## 📄 License
+
+**All rights reserved.** Copyright © 2026 [jumyjumy.com](https://www.jumyjumy.com).
+
+This source code is published for reading, study, and reference only. No license is granted to use, copy, modify, or redistribute it, and commercial use of any kind is strictly prohibited. The sole exception is what GitHub's [Terms of Service](https://docs.github.com/en/site-policy/github-terms/github-terms-of-service) grants to users of a public repository: viewing the code and forking it within GitHub.
+
+Questions and issues are welcome via GitHub Issues. Pull requests are not accepted at this time as there is no contributor license agreement in place.
