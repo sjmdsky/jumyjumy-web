@@ -9,7 +9,7 @@
  * markdown 转义、来源协议白名单、JSON-LD 转义那套防线不在浏览器里重来一遍。
  */
 import type { APIRoute } from 'astro'
-import { API_BASE_URL } from 'astro:env/server'
+import { API_BASE_URL, GATEWAY_TOKEN } from 'astro:env/server'
 import { fetchQuestion, toPendingResolution } from '../../../lib/api'
 
 export const prerender = false
@@ -26,6 +26,10 @@ export const GET: APIRoute = async ({ params, request }) => {
   const result = await fetchQuestion(API_BASE_URL, segment, {
     signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
     userAgent: request.headers.get('user-agent'),
+    // 与详情页同理：不转发的话，后端按 IP 限流时看到的是 Worker 自己的
+    // 地址，所有访客共用一个桶。密钥随行，否则后端不采信。
+    clientIp: request.headers.get('cf-connecting-ip'),
+    gatewayToken: GATEWAY_TOKEN,
   })
   const resolution = toPendingResolution(result)
 

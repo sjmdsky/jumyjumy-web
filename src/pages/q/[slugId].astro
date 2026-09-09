@@ -6,7 +6,7 @@ import { renderAnswer } from '../../lib/markdown'
 import { fetchQuestion, resolveCanonicalRedirect } from '../../lib/api'
 import { toInlineJsonLd } from '../../lib/json-ld'
 import { formatTimestamp } from '../../lib/datetime'
-import { API_BASE_URL } from 'astro:env/server'
+import { API_BASE_URL, GATEWAY_TOKEN } from 'astro:env/server'
 
 const slugId = Astro.params.slugId ?? ''
 
@@ -21,8 +21,15 @@ if (!isIdLookupSegment(slugId)) {
 //
 // 透传访客的 UA：Worker 的出站 fetch 默认不带这个头，而后端把「无 UA」判定
 // 为爬虫。不带就等于告诉后端每一位访客都是爬虫，访问量一个都记不上。
+//
+// 一并透传访客的真实 IP：后端按 IP 限流，而它收到的 cf-connecting-ip 是
+// Cloudflare 在「Worker 打后端」这一跳上写的，也就是 Worker 自己的地址，
+// 所有访客在后端眼里共用一个限流桶。访客的真实 IP 只有这一跳知道。
+// 密钥随行，否则后端不采信——那个头谁都能写。
 const result = await fetchQuestion(API_BASE_URL, slugId, {
   userAgent: Astro.request.headers.get('user-agent'),
+  clientIp: Astro.request.headers.get('cf-connecting-ip'),
+  gatewayToken: GATEWAY_TOKEN,
 })
 
 // 问题不存在必须发真 404。返回 200 空页就是 soft 404，会拖累全站抓取预算。

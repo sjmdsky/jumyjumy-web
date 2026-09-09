@@ -512,6 +512,72 @@ describe('fetchQuestion user agent forwarding', () => {
     return { fetchImpl, seen: () => captured }
   }
 
+  test('forwards the visitor ip and the gateway token together', async () => {
+    // Arrange —— 访客的真实 IP 只有这一跳知道：边缘写给后端的
+    // cf-connecting-ip 描述的是 Worker 自己，不是访客
+    const { fetchImpl, seen } = captureHeaders()
+
+    // Act
+    await fetchQuestion('http://localhost:3000', 'abc-9k3f8p2wqz', {
+      fetchImpl,
+      nowMs: NOW,
+      clientIp: '203.0.113.7',
+      gatewayToken: 'token-under-test',
+    })
+
+    // Assert
+    expect(seen().get('x-real-ip')).toBe('203.0.113.7')
+    expect(seen().get('x-gateway-token')).toBe('token-under-test')
+  })
+
+  test('sends no visitor ip when the token is missing', async () => {
+    // Arrange —— 没有密钥的 x-real-ip 后端一律不采信，发出去只是白费一个头
+    const { fetchImpl, seen } = captureHeaders()
+
+    // Act
+    await fetchQuestion('http://localhost:3000', 'abc-9k3f8p2wqz', {
+      fetchImpl,
+      nowMs: NOW,
+      clientIp: '203.0.113.7',
+    })
+
+    // Assert
+    expect(seen().has('x-real-ip')).toBe(false)
+    expect(seen().has('x-gateway-token')).toBe(false)
+  })
+
+  test('sends no gateway token when the visitor ip is missing', async () => {
+    // Arrange —— 密钥单独发出去没有意义，它唯一的作用是给 IP 背书
+    const { fetchImpl, seen } = captureHeaders()
+
+    // Act
+    await fetchQuestion('http://localhost:3000', 'abc-9k3f8p2wqz', {
+      fetchImpl,
+      nowMs: NOW,
+      gatewayToken: 'token-under-test',
+    })
+
+    // Assert
+    expect(seen().has('x-gateway-token')).toBe(false)
+  })
+
+  test('sends no visitor ip when the value is not a legal header value', async () => {
+    // Arrange —— cf-connecting-ip 正常情况下由边缘写，但这一跳的输入不该
+    // 被无条件信任：带 CR/LF 的值原样拼进出站请求就是头注入
+    const { fetchImpl, seen } = captureHeaders()
+
+    // Act
+    await fetchQuestion('http://localhost:3000', 'abc-9k3f8p2wqz', {
+      fetchImpl,
+      nowMs: NOW,
+      clientIp: '203.0.113.7\r\nx-injected: 1',
+      gatewayToken: 'token-under-test',
+    })
+
+    // Assert
+    expect(seen().has('x-real-ip')).toBe(false)
+  })
+
   test('forwards the visitor user agent so the backend can tell a browser from a crawler', async () => {
     // Arrange —— SSR 是访客与后端之间的唯一一跳，这里不带 UA，后端就只能
     // 看到一个没有 UA 的请求，把每一个真实访客都当成爬虫

@@ -52,6 +52,25 @@ export interface FetchQuestionOptions {
    * 统计随即退化成「爬虫抓得最勤的页面榜」；缺失时伪造一个同理。
    */
   readonly userAgent?: string | null
+  /**
+   * 访客的真实 IP，取自本跳收到的 `cf-connecting-ip`。必须与
+   * [`gatewayToken`] 同时给，否则不发。
+   *
+   * 存在的理由与 [`userAgent`] 同源，但要挡的是另一件事：后端按 IP 限流，
+   * 而它收到的 `cf-connecting-ip` 是 Cloudflare 在「Worker 打后端」这一跳
+   * 上写的，也就是 Worker 自己的地址。于是所有访客在后端眼里共用一个 IP、
+   * 共用一个限流桶——一个人打满，全站一起被限。访客的真实 IP 只有这一跳
+   * 知道，只能由这里转发。
+   */
+  readonly clientIp?: string | null
+  /**
+   * 与后端共享的密钥，随 [`clientIp`] 一起发。
+   *
+   * 没有它后端不会采信转发来的 IP，因为自定义头谁都能写：任何人直接打后端
+   * 域名并轮换那个头，就能拿到无限个限流桶。密钥关掉的正是「不经过本前端」
+   * 那条路径。缺失时两个头都不发，后端回落到 `cf-connecting-ip`。
+   */
+  readonly gatewayToken?: string | null
 }
 
 export function buildQuestionUrl(baseUrl: string, query: string): string {
@@ -163,7 +182,7 @@ export async function fetchQuestion(
   let response: Response
   try {
     response = await fetchImpl(url, {
-      headers: buildHeaders(options.userAgent),
+      headers: buildHeaders(options),
       ...(options.signal ? { signal: options.signal } : {}),
     })
   } catch (cause) {
@@ -205,12 +224,29 @@ export async function fetchQuestion(
 const LEGAL_HEADER_VALUE = /^[\t\x20-\x7e]+$/
 
 /**
- * 出站请求的头。UA 不合法就整个不发——宁可丢掉这一次计数，也不能让一个
- * 畸形 UA 把一个本来能渲染的页面变成 500。
+ * 出站请求的头。任何一个值不合法就整个不发那一项——宁可丢掉这一次计数或
+ * 这一次分桶，也不能让一个畸形头把一个本来能渲染的页面变成 500。
+ *
+ * 访客 IP 与密钥是一对，要么一起发要么都不发：没有密钥的 IP 后端一律不
+ * 采信，发出去只是白费一个头；没有 IP 的密钥更没有意义，它唯一的作用就是
+ * 给那个 IP 背书。
  */
-function buildHeaders(userAgent: string | null | undefined): Record<string, string> {
+function buildHeaders(options: FetchQuestionOptions): Record<string, string> {
   const headers: Record<string, string> = { accept: 'application/json' }
+
+  const { userAgent, clientIp, gatewayToken } = options
   if (userAgent && LEGAL_HEADER_VALUE.test(userAgent)) headers['user-agent'] = userAgent
+
+  if (
+    clientIp &&
+    gatewayToken &&
+    LEGAL_HEADER_VALUE.test(clientIp) &&
+    LEGAL_HEADER_VALUE.test(gatewayToken)
+  ) {
+    headers['x-real-ip'] = clientIp
+    headers['x-gateway-token'] = gatewayToken
+  }
+
   return headers
 }
 

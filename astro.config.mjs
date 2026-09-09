@@ -33,6 +33,17 @@ export default defineConfig({
         access: 'secret',
         default: 'http://localhost:3000',
       }),
+      // 转发访客 IP 时随行的共享密钥，与后端的
+      // APP__RATE_LIMIT__TRUSTED_CLIENT_IP_TOKEN 同值。
+      //
+      // optional 而不给 default：这是密钥，任何默认值都等于一把人人可见的
+      // 钥匙。缺失时前端不发 IP 头，后端回落到 cf-connecting-ip，也就是这
+      // 套机制存在之前的行为——两边可以先后上线，中间态是安全的。
+      GATEWAY_TOKEN: envField.string({
+        context: 'server',
+        access: 'secret',
+        optional: true,
+      }),
     },
   },
 })
