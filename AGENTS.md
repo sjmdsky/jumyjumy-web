@@ -83,10 +83,11 @@ jumyjumy-web/
 - **载荷校验**：后端返回的 JSON 一律视为不可信数据。必需字段（`id` / `query` / `status`）不合规即整体拒绝，宁可报错也不渲染半个页面。`status` 必填且不设默认值——它决定是否 `noindex`，缺省成任何一个值都是错的。
 - **错误分型**：取数结果用判别联合 `ok | notFound | error`，页面层**必须**区分「不存在」（404）与「后端故障」（502）。两者混为一谈会产生 soft 404，或让已收录页面被误剔出索引。后端的 `400`（空问题、超长、被上游拒答）归入 `notFound`：这类 URL 永远不会成立，发 502 只会让爬虫无限重试一个死链。
 - **副作用注入**：`fetch` 以参数传入而非 import，保证模块可单测且不绑定运行时。
+- **访客真实 IP 与网关鉴权透传**：后端按 IP 限流。Worker 将访客的 `cf-connecting-ip` 放入 `x-real-ip` 头转发；Cloudflare 边缘实测会将自家 Worker 发往后端的 `x-real-ip` 提升为下一跳的 `cf-connecting-ip`，外部伪造的 `x-real-ip` 会被边缘丢弃。同时附带共享密钥 `x-gateway-token`（取自 `GATEWAY_TOKEN` secret，与后端 `APP__RATE_LIMIT__TRUSTED_CLIENT_IP_TOKEN` 同值）作为后端鉴权。两者严格配对（有 IP 且有 token 才发），且必须通过合法字符正则校验（防 CRLF 头注入）。缺失 token 时前端降级不发 IP 头，后端回落到自身的 `cf-connecting-ip`。
 
 ### 4.2 URL 结构与永久主键 (`slug.ts`)
 - **路径结构**：`/q/<slug>-<id>`。
-- **永久主键**：末尾 6 位 base36 字符为永久唯一 ID；前置 `slug` 仅作语义装饰。
+- **永久主键**：末尾 10–12 位字符（1位数字+9~11位base36）为永久唯一 ID；前置 `slug` 仅作语义装饰。
 - **ID 的来源**：id 由后端对规范化查询词取 SHA-256 指纹后推导，而非随机生成——同一个问题永远得到同一个 id，即使后端的落库文件（`[q].store_path`，默认 `data/questions.jsonl`）丢失后被重新提问，已被搜索引擎收录的 URL 依然指向同一个页面。反过来说，那个文件丢了会让所有已收录的 `/q/<slug>-<id>` 集体 404，直到同样的问题被重新问一遍。
 - **CTR 优化友好**：随时优化标题导致 slug 改变时，通过 301 永久重定向至最新规范路径，绝对不丢失外链权重。
 - `parseSlugId` 刻意宽松匹配；**存在性由后端判定**，不是解析器的职责。
@@ -106,7 +107,7 @@ jumyjumy-web/
 
 ## 5. 配置与环境变量
 
-`API_BASE_URL` 在 `astro.config.mjs` 的 `env.schema` 中通过 `envField.string` 声明，页面以 `import { API_BASE_URL } from 'astro:env/server'` 读取。
+`API_BASE_URL` 与 `GATEWAY_TOKEN` 在 `astro.config.mjs` 的 `env.schema` 中通过 `envField.string` 声明，页面以 `import { API_BASE_URL, GATEWAY_TOKEN } from 'astro:env/server'` 读取。
 
 `access: 'secret'` 是**功能性选择而非保密声明**：只有 secret 才在运行时从 `process.env` 解析；`access: 'public'` 会把值内联进构建产物，换环境就得重新构建。
 
@@ -115,11 +116,11 @@ jumyjumy-web/
 | 运行方式 | 来源 |
 | :--- | :--- |
 | `astro dev` / `astro build` | `.env` |
-| 线上 Worker | `wrangler secret put API_BASE_URL` 设置的 secret；适配器按请求把 `env.schema` 里的每个键拷进 `process.env` |
+| 线上 Worker | `wrangler secret put <NAME>` 设置的 secret；适配器按请求把 `env.schema` 里的每个键拷进 `process.env` |
 | `wrangler dev` | `.dev.vars`，**不读** `.env` |
-| 都没有 | schema `default`，`http://localhost:3000` |
+| 都没有 | `API_BASE_URL` 回落到 schema `default`（`http://localhost:3000`）；`GATEWAY_TOKEN` 为 `optional: true`，缺失时不发 IP 与 token 请求头 |
 
-该值**不写入** `wrangler.jsonc` 的 `vars`。本仓库已公开，而 `vars` 是明文的：把后端源站提交进去，等于公开一个无鉴权、每次调用都消耗模型额度的入口。只有 secret 既能留在树外，又能按请求进入 `process.env`。都没配置时 `/q/*` 会全部 502——那是配置缺失的预期表现，不是 bug。
+该值**不写入** `wrangler.jsonc` 的 `vars`。本仓库已公开，而 `vars` 是明文的：把后端源站或共享密钥提交进去，等于公开一个无鉴权、每次调用都消耗模型额度的入口。只有 secret 既能留在树外，又能按请求进入 `process.env`。都没配置时 `/q/*` 会全部 502——那是配置缺失的预期表现，不是 bug。
 
 ---
 

@@ -79,18 +79,25 @@ With no backend reachable on `API_BASE_URL`, `/` still returns 200 because it is
 
 ## Configuration
 
-One variable: `API_BASE_URL`, the root of the backend JSON API. It is declared in `astro.config.mjs` through `astro:env` and read by pages via `astro:env/server`.
+Declared in `astro.config.mjs` through `astro:env` and read by pages via `astro:env/server`:
+
+| Variable | Required | Description |
+| :--- | :--- | :--- |
+| `API_BASE_URL` | No (defaults to `http://localhost:3000`) | Root URL of the backend JSON API. |
+| `GATEWAY_TOKEN` | No (optional) | Shared secret with the backend (`x-gateway-token`), gating `/q/` requests and endorsing visitor IP forwarding. |
+
+Resolution sources:
 
 | Mode | Source |
 | :--- | :--- |
 | `astro dev` / `astro build` | `.env` |
 | `wrangler dev` | `.dev.vars` |
-| deployed Worker | `wrangler secret put API_BASE_URL` |
-| nothing set | schema default, `http://localhost:3000` |
+| deployed Worker | `wrangler secret put <NAME>` |
+| nothing set | schema default (`API_BASE_URL`), or omitted (`GATEWAY_TOKEN`) |
 
-`access: 'secret'` in the schema is a functional choice, not a secrecy claim: it is the only setting that resolves the value **at runtime**. `access: 'public'` would inline it into the build output, so switching environments would mean rebuilding.
+`access: 'secret'` in the schema is a functional choice, not a secrecy claim: it is the only setting that resolves values **at runtime**. `access: 'public'` would inline them into the build output, so switching environments would mean rebuilding.
 
-The value is deliberately absent from `wrangler.jsonc`. `vars` there is plaintext, and this repository is public.
+Neither value is stored in `wrangler.jsonc`. `vars` there is plaintext, and this repository is public.
 
 ## Project layout
 
@@ -140,10 +147,11 @@ A request matches the asset layer first and only falls through to the Worker on 
 
 `public/.assetsignore` is load-bearing, not tidiness. The server bundle sits *inside* the assets directory, and Workers does **not** exclude `_worker.js` automatically the way Pages did — without that file, `GET /_worker.js/index.js` returns 200 and serves the whole server bundle. It lives in `public/` rather than `dist/` because `astro build` rebuilds `dist/` from scratch on every run.
 
-To deploy to your own account, change `name` and `routes` in `wrangler.jsonc` and `site` in `astro.config.mjs`, then set the backend URL as a secret:
+To deploy to your own account, change `name` and `routes` in `wrangler.jsonc` and `site` in `astro.config.mjs`, then configure the backend URL and optional gateway token secrets:
 
 ```bash
 wrangler secret put API_BASE_URL
+wrangler secret put GATEWAY_TOKEN    # optional: shared secret for backend gateway auth
 npm run deploy
 ```
 
