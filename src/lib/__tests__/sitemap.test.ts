@@ -71,16 +71,20 @@ describe('buildSitemap', () => {
     expect(() => new URL(loc as string)).not.toThrow()
   })
 
-  test('escapes ampersands and angle brackets so the document stays well formed', () => {
-    // Arrange
-    const one = entry({ title: 'a & b <script>' })
+  test('escapes ampersands and angle brackets in the site URL so the document stays well formed', () => {
+    // Arrange —— toSlug 会把特殊字符变连字符，所以标题里的 & < 到不了 escapeXml。
+    // 只有 siteUrl 是原样传的。这个测试确认 escapeXml 会被调用并工作。
+    const one = entry()
+    const siteWithSpecials = 'https://example.com?param=a&b<injected>'
 
     // Act
-    const xml = buildSitemap([one], SITE)
+    const xml = buildSitemap([one], siteWithSpecials)
 
-    // Assert
-    expect(xml).not.toMatch(/<loc>[^<]*&(?!amp;)/)
-    expect(xml).not.toContain('<script>')
+    // Assert —— 原样的 & 与 < 不能出现在 XML 文本节点里
+    expect(xml).toContain('&amp;')
+    expect(xml).toContain('&lt;')
+    expect(xml).not.toMatch(/&(?!amp;|lt;|gt;)/) // 未转义的 & 只能是 HTML 实体的一部分
+    expect(xml).not.toContain('<injected>')
   })
 
   test('lastmod is an ISO timestamp with no milliseconds', () => {
@@ -186,6 +190,27 @@ describe('fetchIndexable', () => {
     expect(seen?.headers.get('x-gateway-token')).toBeNull()
   })
 
+  test('sends token alone when clientIp is absent (local development case)', async () => {
+    // Arrange —— 本地开发（astro dev on node）没有 cf-connecting-ip，但仍需转发密钥
+    let seen: Request | undefined
+    const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen = new Request(input as RequestInfo, init)
+      return new Response(JSON.stringify({ success: true, data: { items: [], nextCursor: null } }), {
+        status: 200,
+      })
+    }) as typeof globalThis.fetch
+
+    // Act
+    await fetchIndexable('https://gateway.example', {
+      fetchImpl,
+      gatewayToken: 'local-dev-token',
+    })
+
+    // Assert —— 密钥独立发送，IP 不依赖它
+    expect(seen?.headers.get('x-gateway-token')).toBe('local-dev-token')
+    expect(seen?.headers.get('x-real-ip')).toBeNull()
+  })
+
   test('a non-2xx response is an error, never an empty page', async () => {
     // Arrange
     const fetchImpl = (async () => new Response('', { status: 503 })) as typeof globalThis.fetch
@@ -220,5 +245,50 @@ describe('fetchIndexable', () => {
 
     // Assert
     expect(result.kind).toBe('error')
+  })
+
+  test('fetch throwing is an error, not an empty result', async () => {
+    // Arrange —— fetchImpl 拒绝（网络故障）
+    const fetchImpl = (async () => {
+      throw new Error('network timeout')
+    }) as typeof globalThis.fetch
+
+    // Act
+    const result = await fetchIndexable('https://gateway.example', { fetchImpl })
+
+    // Assert —— 取数失败绝不能退化成「库里没有记录」
+    expect(result.kind).toBe('error')
+    expect(result.message).toContain('feed request failed')
+  })
+
+  test('response.json() throwing is an error, not an empty result', async () => {
+    // Arrange —— 响应看起来 OK 但 JSON 格式错误
+    const fetchImpl = (async () =>
+      new Response('not valid json', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })) as typeof globalThis.fetch
+
+    // Act
+    const result = await fetchIndexable('https://gateway.example', { fetchImpl })
+
+    // Assert
+    expect(result.kind).toBe('error')
+    expect(result.message).toContain('invalid JSON')
+  })
+
+  test('an envelope that is not an object is an error', async () => {
+    // Arrange —— 成功的状态码但返回原始值而非对象
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify('just a string'), {
+        status: 200,
+      })) as typeof globalThis.fetch
+
+    // Act
+    const result = await fetchIndexable('https://gateway.example', { fetchImpl })
+
+    // Assert
+    expect(result.kind).toBe('error')
+    expect(result.message).toContain('envelope was not an object')
   })
 })

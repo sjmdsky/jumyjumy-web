@@ -49,7 +49,13 @@ export type FeedResult =
 
 export interface FetchIndexableOptions {
   readonly fetchImpl?: typeof globalThis.fetch
-  /** 网关的前端共享密钥。与 clientIp 要么一起发，要么都不发。 */
+  /**
+   * 网关的前端共享密钥。配置时始终发送；`clientIp` 可用时同时转发。
+   *
+   * 与 `api.ts` 不同，本模块将密钥与 IP 视为独立：IP 的可信度来自 Cloudflare
+   * 边缘的提升，不来自这把密钥。密钥的唯一职责是给 `/q/sitemap/feed` 把门，
+   * 无需绑定 IP。这个分歧的现实原因见下方头构建的注释。
+   */
   readonly gatewayToken?: string | null
   /**
    * 访客的真实 IP，取自本跳收到的 `cf-connecting-ip`。
@@ -106,8 +112,14 @@ export async function fetchIndexable(
 ): Promise<FeedResult> {
   const call = options.fetchImpl ?? globalThis.fetch
   const headers = new Headers()
-  // 两个头要么一起发要么都不发，与 api.ts 的 buildHeaders 同一条绑定：
-  // 网关未配密钥时保持开放，所以两边先后上线的中间态不会白屏。
+  // 与 api.ts 的 buildHeaders 不同，本模块将密钥与 IP 视为独立，三种情况：
+  // (1) clientIp + gatewayToken：两个都发
+  // (2) 只有 gatewayToken：发密钥（本地开发缺 cf-connecting-ip 时的情况）
+  // (3) 都没有：什么都不发
+  // 理由：IP 的可信度源自 Cloudflare 边缘的提升，不源自密钥。密钥的唯一职责是给
+  // `/q/sitemap/feed` 把门，不需要跟 IP 一起。本地开发（`astro dev` on node）
+  // 没有 cf-connecting-ip，若按 api.ts 的「要么一起要么都不」，本地调试会密钥未发
+  // → 网关 401 → sitemap 503 → Task 5 验证失败。
   if (options.clientIp && options.gatewayToken) {
     headers.set('x-real-ip', options.clientIp)
     headers.set('x-gateway-token', options.gatewayToken)
