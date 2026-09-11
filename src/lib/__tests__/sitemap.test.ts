@@ -258,6 +258,7 @@ describe('fetchIndexable', () => {
 
     // Assert —— 取数失败绝不能退化成「库里没有记录」
     expect(result.kind).toBe('error')
+    if (result.kind !== 'error') return
     expect(result.message).toContain('feed request failed')
   })
 
@@ -274,6 +275,7 @@ describe('fetchIndexable', () => {
 
     // Assert
     expect(result.kind).toBe('error')
+    if (result.kind !== 'error') return
     expect(result.message).toContain('invalid JSON')
   })
 
@@ -289,6 +291,7 @@ describe('fetchIndexable', () => {
 
     // Assert
     expect(result.kind).toBe('error')
+    if (result.kind !== 'error') return
     expect(result.message).toContain('envelope was not an object')
   })
 })
