@@ -27,3 +27,5 @@ User-agent: *
 Content-signal: search=yes, ai-train=no
 Disallow: /api/
 Disallow: /q/pending/
+
+Sitemap: https://www.jumyjumy.com/sitemap.xml
