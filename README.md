@@ -30,6 +30,7 @@ This repository hosts the **frontend**: an Astro application running on Cloudfla
 
 - **⚡ Edge-Native SSR**: Powered by Cloudflare Workers for sub-millisecond edge routing and ultra-fast global delivery.
 - **🎯 SEO & Indexation Precision**: Emits strictly truthful HTTP status codes (`200`, `301`, `404`, `502`) to optimize Google crawl budget and protect link equity.
+- **🗺️ Edge-Cached Dynamic Sitemap**: Serves `/sitemap.xml` with Cloudflare Cache API (24h edge TTL), truthful `503` fail-safe semantics (never masking failures with empty `200` documents), and strict pagination validation.
 - **⏳ Zero-Latency Skeleton Routing**: New model queries instantly render a `noindex` skeleton on the client side, isolating TTFB from AI generation latency and stopping search bots from triggering costly LLM runs.
 - **🛡️ Defense-in-Depth Security**: Strict protocol whitelisting (`http`/`https` only), default-escaped Markdown parsing, and script-tag injection guards on JSON-LD structured data.
 - **📦 Pure Domain Core**: `src/lib/` is completely pure, dependency-free, runtime-agnostic, and thoroughly unit-tested.
@@ -177,7 +178,7 @@ jumyjumy-web/
 ├── public/
 │   ├── .assetsignore             # CRITICAL: Excludes _worker.js from public static assets
 │   ├── favicon.svg               # Site icon
-│   └── robots.txt                # Crawler directives
+│   └── robots.txt                # Crawler directives & sitemap declaration
 ├── src/
 │   ├── components/               # Brand & shared UI components (Logo.astro, etc.)
 │   ├── layouts/                  # Base layout, HTML skeleton, SEO meta, JSON-LD
@@ -185,6 +186,7 @@ jumyjumy-web/
 │   │   ├── __tests__/            # Vitest unit test suites
 │   │   ├── api.ts                # Backend contract, envelope parsing, validation, fetch
 │   │   ├── slug.ts               # /q/<slug>-<id> parser, base36 IDs, canonical URL logic
+│   │   ├── sitemap.ts            # Dynamic sitemap fetch loop, pagination validation, XML escaping
 │   │   ├── markdown.ts           # Safe GFM markdown renderer with table support
 │   │   ├── json-ld.ts            # Safe inline JSON-LD generator (anti-XSS)
 │   │   ├── datetime.ts           # Client & server unified timestamp formatter
@@ -193,7 +195,8 @@ jumyjumy-web/
 │   │   ├── index.astro           # The ask box (prerendered static HTML)
 │   │   ├── q/[slugId].astro      # Canonical answer page (SSR)
 │   │   ├── q/pending/[query].astro # Transitional noindex skeleton
-│   │   └── api/q/[segment].ts    # Client polling endpoint for skeleton
+│   │   ├── api/q/[segment].ts    # Client polling endpoint for skeleton
+│   │   └── sitemap.xml.ts        # Edge-cached dynamic sitemap endpoint
 │   └── styles/                   # Minimal typography and CSS variable tokens
 ├── astro.config.mjs              # Astro configuration + astro:env schema
 ├── package.json                  # Dependencies and build scripts

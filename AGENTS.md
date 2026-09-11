@@ -48,11 +48,12 @@ jumyjumy-web/
 │   │   ├── __tests__/      # Vitest 单元测试
 │   │   ├── api.ts          # 后端契约：URL 构造、信封解包与词汇翻译、载荷校验、规范路径判定、取数
 │   │   ├── slug.ts         # URL 生成、路径编码与 base36 id 解析
+│   │   ├── sitemap.ts      # Sitemap 取数循环、分页校验与 XML 安全拼装
 │   │   ├── markdown.ts     # 默认转义、防 XSS 的 Markdown 渲染器（支持 GFM 表格与排版）
 │   │   ├── json-ld.ts      # 结构化数据内联转义（防 </script> 逃逸）
 │   │   ├── datetime.ts     # 时间戳格式化工具（支持访客本地时区）
 │   │   └── types.ts        # 领域数据模型定义
-│   ├── pages/              # Astro 路由（index.astro, q/[slugId].astro）
+│   ├── pages/              # Astro 路由（index.astro, q/[slugId].astro, sitemap.xml.ts 等）
 │   └── styles/             # 全局极简 CSS 变量与 Typography 样式
 ├── .env / .env.example     # 后端 endpoint 配置
 ├── astro.config.mjs        # Astro 配置 + astro:env 环境变量 schema
@@ -102,6 +103,15 @@ jumyjumy-web/
 ### 4.4 数据只读不可变 (`types.ts`)
 - 所有领域模型字段均为 `readonly`（如 `readonly sources: readonly Source[]`）。
 - 严禁对领域对象进行原地（in-place）属性修改，必须使用不可变派生（`{ ...question, ... }`）。
+
+### 4.5 搜索引擎发现通道与 Sitemap 契约 (`sitemap.ts`, `sitemap.xml.ts`)
+- **唯一发现通道**：本站问答详情页是孤岛（首页跳转为脚本而非超链，详情页仅回链首页及外部信源，无站内互链网络）。`/sitemap.xml` 是 Googlebot 发现全站 `/q/<slug>-<id>` 的唯一通道。
+- **真实失败语义**：取数失败一律返回 `503 Service Unavailable`，**绝不返回 200 加空 `<urlset>`**。空 urlset 是合法 XML 文档，会导致 Google 误判页面已清空并注销收录；503 会指示爬虫稍后重试并保留上次抓取的索引。
+- **XML 前端拼装**：URL slug 的唯一生成源是前端的 `buildPath`。后端不维护 slug，若由后端拼装 URL，两端规范化逻辑分歧会导致 sitemap 充满 301 重定向，侵蚀抓取预算。
+- **严格分页终结**：分页必须由后端显式返回 `nextCursor: null` 终结。缺少 `nextCursor` 或格式错误直接判为 error 拒绝，防止因上游接口变动而静默截断后续全部页面。
+- **边缘显式缓存**：通过 Cloudflare Workers Cache API（`caches.default`）显式缓存 24 小时（`max-age=86400`）。缓存键严格去除查询参数，防止 query string 绕过打崩源站。只有 200 成功响应写入缓存，503 绝不缓存。
+- **安全转义**：XML 生成经 `escapeXml` 严密转义 `&`, `<`, `>`，防范异常标题注入破坏 XML 结构。
+- **爬虫内容信号**：`robots.txt` 用 Cloudflare Content Signals 表态 `search=yes, ai-input=yes, ai-train=no`。放行 ai-input 是刻意的——答案具时效性，被 AI 助手抓去当信源是本站的分发渠道而非泄漏；ai-train 保持拒绝，语料本身就是产品。该字段只是声明，真正的准入仍由 `Disallow` 控制。
 
 ---
 

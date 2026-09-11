@@ -23,8 +23,11 @@
 # RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
 # AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
 
+# ai-input=yes is deliberate: answers here are time-sensitive, and being
+# fetched as a source for AI answers is a distribution channel, not a leak.
+# ai-train stays no: the corpus itself is the product.
 User-agent: *
-Content-signal: search=yes, ai-train=no
+Content-signal: search=yes, ai-input=yes, ai-train=no
 Disallow: /api/
 Disallow: /q/pending/
 

@@ -30,6 +30,7 @@
 
 - **⚡ 边缘原生 SSR (Edge-Native SSR)**：运行在 Cloudflare Workers 边缘网络，实现毫秒级边缘路由匹配与极速首屏交付。
 - **🎯 极致 SEO 索引精准度 (SEO-First)**：发出完全真实的 HTTP 状态码（`200`、`301`、`404`、`502`），杜绝软 404（Soft 404），坚决保护 Google 抓取预算与外链权重。
+- **🗺️ 边缘缓存动态 Sitemap (Edge-Cached Dynamic Sitemap)**：`/sitemap.xml` 经 Cloudflare Cache API 边缘缓存 24 小时；取数失败一律返回真实 `503`，绝不用空 `200` 文档掩盖故障；对上游分页游标做严格校验，宁可整份失败也不静默截断。
 - **⏳ 零等待骨架路由机制 (Zero-Latency Skeleton Routing)**：新问题请求即刻返回 `noindex` 骨架屏，将 TTFB 与上游模型推理耗时彻底解耦；同时阻止搜索引擎爬虫触发高昂的模型计算开销。
 - **🛡️ 纵深防御基线 (Defense-in-Depth Security)**：权威信源严格协议白名单（仅限 `http`/`https`）、Markdown 默认转义防 XSS 注入、结构化数据 (JSON-LD) 防 `</script>` 逃逸攻击。
 - **📦 零外部依赖的领域核心 (Pure Domain Core)**：`src/lib/` 内部纯函数设计、零外部运行时依赖、与运行时解耦，配备高覆盖率的纯单测保障。
@@ -185,6 +186,7 @@ jumyjumy-web/
 │   │   ├── __tests__/            # Vitest 单元测试套件
 │   │   ├── api.ts                # 后端通信契约、信封解析与映射、校验、规范重定向判定
 │   │   ├── slug.ts               # /q/<slug>-<id> 路径解析、Base36 ID 与 URL 编码
+│   │   ├── sitemap.ts            # Sitemap 取数翻页、分页校验与 XML 安全拼装
 │   │   ├── markdown.ts           # 默认转义的高安全 Markdown 渲染器 (支持 GFM 表格)
 │   │   ├── json-ld.ts            # 安全转义的结构化数据嵌入工具 (防 script 逃逸)
 │   │   ├── datetime.ts           # 客户端与服务端统一的时间戳本地化格式化工具
@@ -193,7 +195,8 @@ jumyjumy-web/
 │   │   ├── index.astro           # 首页提问框 (预渲染静态资源)
 │   │   ├── q/[slugId].astro      # 问答详情页 (SSR 服务端渲染)
 │   │   ├── q/pending/[query].astro # 过渡态 noindex 骨架屏
-│   │   └── api/q/[segment].ts    # 骨架屏异步轮询专用端点
+│   │   ├── api/q/[segment].ts    # 骨架屏异步轮询专用端点
+│   │   └── sitemap.xml.ts        # /sitemap.xml 路由 (边缘缓存、503 失败语义)
 │   └── styles/                   # 极简全局样式变量与 Typography 规则
 ├── astro.config.mjs              # Astro 配置与 astro:env 校验 schema
 ├── package.json                  # 项目依赖与运行脚本
