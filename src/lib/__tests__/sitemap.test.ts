@@ -247,6 +247,40 @@ describe('fetchIndexable', () => {
     expect(result.kind).toBe('error')
   })
 
+  test('a feed page missing the cursor key entirely is an error, not a silent truncation', async () => {
+    // Arrange —— key 缺失与显式 null 不能同等对待：少一个 nextCursor 会
+    // 静默丢掉这一页之后的**全部**剩余页面，比 parseItems 拒绝的「少一个
+    // item」代价大得多，绝不能被当成「到头了」放行
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ success: true, data: { items: [] } }), {
+        status: 200,
+      })) as typeof globalThis.fetch
+
+    // Act
+    const result = await fetchIndexable('https://gateway.example', { fetchImpl })
+
+    // Assert
+    expect(result.kind).toBe('error')
+    if (result.kind !== 'error') return
+    expect(result.message).toContain('omitted its cursor')
+  })
+
+  test('a cursor that is neither null nor a string is an error, not treated as end of feed', async () => {
+    // Arrange —— 契约外的形状（这里是数字），不是「到头了」的合法信号
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ success: true, data: { items: [], nextCursor: 42 } }), {
+        status: 200,
+      })) as typeof globalThis.fetch
+
+    // Act
+    const result = await fetchIndexable('https://gateway.example', { fetchImpl })
+
+    // Assert
+    expect(result.kind).toBe('error')
+    if (result.kind !== 'error') return
+    expect(result.message).toContain('malformed cursor')
+  })
+
   test('fetch throwing is an error, not an empty result', async () => {
     // Arrange —— fetchImpl 拒绝（网络故障）
     const fetchImpl = (async () => {

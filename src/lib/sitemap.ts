@@ -162,15 +162,30 @@ export async function fetchIndexable(
       return { kind: 'error', message: 'feed reported failure' }
     }
 
-    const { items, nextCursor } = data as Record<string, unknown>
+    const page = data as Record<string, unknown>
+    const { items } = page
     const parsed = parseItems(items)
     if (parsed === null) {
       return { kind: 'error', message: 'feed returned an item that does not match the contract' }
     }
     entries.push(...parsed)
 
-    if (typeof nextCursor !== 'string' || nextCursor.length === 0) {
+    // 缺失的 key 与显式的 null 在这里不能同等对待，尽管 `parseItems` 对
+    // 单条记录的字段是这么处理的（缺字段与错字段一样，都直接拒绝整页）。
+    // 分歧的原因是代价不对等：少一条 item 是少发现一个页面，少一个
+    // nextCursor 是少发现这一页之后的**全部**页面——用 `in` 而不是
+    // `nextCursor === undefined` 来判断，因为一个显式写了
+    // `"nextCursor": undefined` 的响应体经 JSON 解析后同样查不到这个
+    // key，两者都该按「没给」处理，而不是被误判成「给了但是 null」。
+    if (!('nextCursor' in page)) {
+      return { kind: 'error', message: 'feed page omitted its cursor' }
+    }
+    const { nextCursor } = page
+    if (nextCursor === null) {
       return { kind: 'ok', entries, truncated: false }
+    }
+    if (typeof nextCursor !== 'string' || nextCursor.length === 0) {
+      return { kind: 'error', message: 'feed page had a malformed cursor' }
     }
     cursor = nextCursor
   }
