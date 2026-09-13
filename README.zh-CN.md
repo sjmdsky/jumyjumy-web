@@ -2,7 +2,7 @@
 
 # jumyjumy-web
 
-**面向 Google SEO 优化的高性能 AI Agent 搜索前端**
+**Real-time AI Search（实时 AI 搜索）—— [jumyjumy.com](https://www.jumyjumy.com) 面向 Google SEO 优化的高性能前端**
 
 [English](README.md) • [简体中文](README.zh-CN.md)
 
@@ -20,9 +20,9 @@
 
 ## 📖 项目简介
 
-**[jumyjumy.com](https://www.jumyjumy.com)** 是一个 AI Agent 搜索引擎平台。用户输入自然语言问题，自主智能体（Agent）进行全网检索与整合研究，输出结构清晰、带有权威信源引用的单一高质回答。每个问答都会生成一个永久且稳定的独立 URL——可被搜索引擎收录索引、便于引用传播。
+**[jumyjumy.com](https://www.jumyjumy.com)** 是一个**实时 AI 搜索引擎（Real-time AI Search）**。用户用自然语言提出任何问题，JumyJumy 实时检索全网，直接给出一个带信源引用的答案——依据的是网络上当下的信息，而不是模型训练截止时的旧知识。每个答案都会发布在永久且稳定的独立 URL 上，并标注最近更新时间——可被搜索引擎收录索引、便于引用传播。
 
-本仓库是站点的**前端系统**：基于 Astro 构建并运行在 Cloudflare Workers 边缘网络上，全权负责服务端渲染 (SSR)、HTTP 响应语义控制与严格的安全边界防护。负责检索与生成答案的 AI Agent 为独立后端服务，不包含在本仓库中。
+本仓库是站点的**前端系统**：基于 Astro 构建并运行在 Cloudflare Workers 边缘网络上，全权负责服务端渲染 (SSR)、HTTP 响应语义控制与严格的安全边界防护。负责实时检索与生成答案的后端为独立服务，不包含在本仓库中。
 
 ---
 
@@ -41,7 +41,7 @@
 
 全站仅包含两种核心用户页面类型：
 
-1. **首页提问框** (`/`) — 极简居中的提问界面，在边缘侧预渲染（Prerendered）为静态 HTML。
+1. **首页搜索框** (`/`) — 极简居中的实时搜索界面，在边缘侧预渲染（Prerendered）为静态 HTML。
 2. **问答详情页** (`/q/<slug>-<id>`) — 特定问题的规范、可收录详情页。
 
 此外存在一个过渡态路由：在全新答案生成期间由详情路由内部重写渲染的 `noindex` 骨架屏。
@@ -192,7 +192,7 @@ jumyjumy-web/
 │   │   ├── datetime.ts           # 客户端与服务端统一的时间戳本地化格式化工具
 │   │   └── types.ts              # 领域模型定义 (所有字段均为 readonly 不可变)
 │   ├── pages/
-│   │   ├── index.astro           # 首页提问框 (预渲染静态资源)
+│   │   ├── index.astro           # 首页搜索框 (预渲染静态资源)
 │   │   ├── q/[slugId].astro      # 问答详情页 (SSR 服务端渲染)
 │   │   ├── q/pending/[query].astro # 过渡态 noindex 骨架屏
 │   │   ├── api/q/[segment].ts    # 骨架屏异步轮询专用端点

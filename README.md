@@ -2,7 +2,7 @@
 
 # jumyjumy-web
 
-**High-performance, SEO-first frontend for AI Agent Search.**
+**Real-time AI Search — the high-performance, SEO-first frontend of [jumyjumy.com](https://www.jumyjumy.com).**
 
 [English](README.md) • [简体中文](README.zh-CN.md)
 
@@ -20,9 +20,9 @@
 
 ## 📖 Overview
 
-**[jumyjumy.com](https://www.jumyjumy.com)** is an AI Agent Search platform. Users ask a question in natural language; an autonomous agent performs research and produces a single, well-sourced, authoritative answer. Every answer is published at a permanent, stable URL — indexable by search engines, citeable, and linkable.
+**[jumyjumy.com](https://www.jumyjumy.com)** is a **Real-time AI Search** engine. Ask anything in natural language: JumyJumy searches the live web and returns a single, direct answer with cited sources — grounded in what the web says now, not in a model's training cutoff. Every answer is published at a permanent, stable URL and stamped with its last update time — indexable by search engines, citeable, and linkable.
 
-This repository hosts the **frontend**: an Astro application running on Cloudflare Workers that handles server-side rendering (SSR), HTTP semantics, and strict security boundaries. The AI agent that researches and synthesizes answers lives in a separate backend service.
+This repository hosts the **frontend**: an Astro application running on Cloudflare Workers that handles server-side rendering (SSR), HTTP semantics, and strict security boundaries. The backend that searches the web and synthesizes answers is a separate service.
 
 ---
 
@@ -41,7 +41,7 @@ This repository hosts the **frontend**: an Astro application running on Cloudfla
 
 The site consists of two user-facing page types:
 
-1. **The Ask Box** (`/`) — A minimalist, centered query interface prerendered to static HTML at the edge.
+1. **The Search Box** (`/`) — A minimalist, centered real-time search interface prerendered to static HTML at the edge.
 2. **The Answer Page** (`/q/<slug>-<id>`) — The canonical, indexable document for a specific question.
 
 A transitional route also exists: a lightweight `noindex` skeleton that the router renders while a brand-new answer is being synthesized.
@@ -192,7 +192,7 @@ jumyjumy-web/
 │   │   ├── datetime.ts           # Client & server unified timestamp formatter
 │   │   └── types.ts              # Readonly domain type definitions
 │   ├── pages/
-│   │   ├── index.astro           # The ask box (prerendered static HTML)
+│   │   ├── index.astro           # The search box (prerendered static HTML)
 │   │   ├── q/[slugId].astro      # Canonical answer page (SSR)
 │   │   ├── q/pending/[query].astro # Transitional noindex skeleton
 │   │   ├── api/q/[segment].ts    # Client polling endpoint for skeleton

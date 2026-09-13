@@ -8,7 +8,8 @@ This document defines the visual design language, interaction guidelines, and in
 
 ## 1. Design Philosophy: Extreme Minimalism (Zen & Content-First)
 
-- **Core Mission**: Eliminate all non-essential elements; focus 100% on "asking questions and getting direct, high-value answers."
+- **Positioning**: **Real-time AI Search** — every answer is drawn from the live web at the time it is asked, carries its sources, and shows when it was last updated. Copy, meta tags and UI states should reinforce "search, live, sourced", not "chatbot" or "Q&A forum".
+- **Core Mission**: Eliminate all non-essential elements; focus 100% on "searching anything and getting a direct, current, sourced answer."
 - **Zero Cognitive Load**: No cluttered sidebars, no carousels, no infinite recommendation feeds, no banner ads.
 - **Extreme Performance & SEO**: Zero external web-font render blocking, zero redundant JS runtime, sub-second LCP (< 0.8s) and zero CLS.
 - **Adaptive Dark Mode**: High-contrast, clean monochrome palette adapting seamlessly to `prefers-color-scheme`.
@@ -21,7 +22,7 @@ The platform consists of only two page types:
 
 ```text
 jumyjumy-web
-├── 1. Homepage (/)                 -> Minimalist centered ask/search box
+├── 1. Homepage (/)                 -> Minimalist centered real-time search box
 └── 2. Answer Detail (/q/<slug>-<id>) -> Focused, high-readability Q&A article
 ```
 
@@ -32,8 +33,9 @@ jumyjumy-web
 #### Visual Layout
 - **Viewport Centering**: Centered vertically (optical golden ratio ~38vh - 42vh offset) and horizontally.
 - **Minimalist Branding**: Stylized `JumyJumy` logo with twin capitalized chromatic gradient `"J"` letters and crisp monochrome `"umy"` body text.
-- **Tagline**: `AI Agent Search`
-- **Single Interactive Element (Ask Box)**:
+- **Tagline**: `Real-time AI Search`
+- **Meta**: `<title>JumyJumy — Real-time AI Search</title>`; description `Real-time AI search. Ask anything and get a direct answer drawn from the live web, with cited sources.`
+- **Single Interactive Element (Search Box)**:
   - Generous input box (Height $\approx 56\text{px}$, pill radius) with subtle hairline border and smooth focus ring.
   - Placeholder: `Ask a question...`
   - Right-aligned minimal action arrow button.
@@ -45,7 +47,7 @@ jumyjumy-web
 |                                                             |
 |                                                             |
 |                          JumyJumy                           |
-|                       AI Agent Search                       |
+|                     Real-time AI Search                     |
 |                                                             |
 |        +-------------------------------------------+        |
 |        |  Ask a question...                 [ -> ] |        |
