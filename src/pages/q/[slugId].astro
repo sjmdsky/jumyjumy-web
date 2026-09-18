@@ -133,32 +133,36 @@ const schemaJsonLd = {
 
       <!-- 顶部搜索框。刻意留空，与首页一致：这里是提新问题的入口，不是改这一题的入口 -->
       <form class="header-search-form" action="#" method="GET">
-        <div class="header-input-group">
-          <input
-            type="text"
-            name="q"
-            class="header-search-input"
-            required
-            autocomplete="off"
-            aria-label="Search or ask anything"
-          />
-          <button type="submit" class="header-submit-btn" aria-label="Search">
-            <svg
-              class="header-arrow-icon"
-              viewBox="0 0 24 24"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14"></path>
-              <path d="m12 5 7 7-7 7"></path>
-            </svg>
-          </button>
+        <div class="header-search-streamer">
+          <div class="streamer-glow" aria-hidden="true"></div>
+          <div class="header-input-group">
+            <input
+              type="text"
+              name="q"
+              class="header-search-input"
+              required
+              autocomplete="off"
+              placeholder="Real-time AI Search"
+              aria-label="Search or ask anything"
+            />
+            <button type="submit" class="header-submit-btn" aria-label="Search">
+              <svg
+                class="header-arrow-icon"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -300,31 +304,119 @@ const schemaJsonLd = {
     min-width: 0;
   }
 
+  /* 顶部流光搜索框容器与品牌渐变配色 */
+  .header-search-streamer {
+    --stream-c1: #f59e0b;
+    --stream-c2: #f97316;
+    --stream-c3: #fb7185;
+    --stream-glow-c1: rgba(245, 158, 11, 0.28);
+    --stream-glow-c2: rgba(249, 115, 22, 0.35);
+    --stream-glow-c3: rgba(251, 113, 133, 0.28);
+    --stream-base: var(--color-border);
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+    border-radius: var(--radius-full);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .header-search-streamer {
+      --stream-c1: #fbbf24;
+      --stream-c2: #fb923c;
+      --stream-c3: #f43f5e;
+      --stream-glow-c1: rgba(251, 191, 36, 0.25);
+      --stream-glow-c2: rgba(251, 146, 60, 0.32);
+      --stream-glow-c3: rgba(244, 63, 94, 0.25);
+    }
+  }
+
+  /* 柔和的环境流光弥散光晕 (Ambient Streamer Glow) */
+  .header-search-streamer .streamer-glow {
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 20%,
+      var(--stream-glow-c1) 42%,
+      var(--stream-glow-c2) 52%,
+      var(--stream-glow-c3) 62%,
+      transparent 82%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: border-stream-glow 4.5s linear infinite;
+    filter: blur(8px);
+    opacity: 0.38;
+    pointer-events: none;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+  }
+
+  .header-search-streamer:hover .streamer-glow {
+    opacity: 0.65;
+    filter: blur(10px);
+  }
+
+  .header-search-streamer:focus-within .streamer-glow {
+    opacity: 0.9;
+    filter: blur(12px);
+  }
+
   .header-input-group {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     width: 100%;
-    max-width: 500px;
     background-color: var(--color-bg-subtle);
-    border: 1.5px solid var(--color-border);
     border-radius: var(--radius-full);
+    border: 1.5px solid transparent;
+    background-image:
+      linear-gradient(var(--color-bg-subtle), var(--color-bg-subtle)),
+      linear-gradient(
+        90deg,
+        var(--stream-base) 0%,
+        var(--stream-base) 20%,
+        var(--stream-c1) 42%,
+        var(--stream-c2) 52%,
+        var(--stream-c3) 62%,
+        var(--stream-base) 82%,
+        var(--stream-base) 100%
+      );
+    background-origin: padding-box, border-box;
+    background-clip: padding-box, border-box;
+    background-size: 100% 100%, 200% 100%;
+    background-repeat: no-repeat, repeat-x;
+    animation: border-stream-border 4.5s linear infinite;
     padding: 0.4rem 0.65rem 0.4rem 1.15rem;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-image 0.2s ease;
   }
 
   .header-input-group:hover {
-    border-color: var(--color-border-hover);
+    box-shadow: var(--shadow-md);
   }
 
   .header-input-group:focus-within {
-    border-color: var(--color-border-focus);
-    background-color: var(--color-bg-input);
-    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08);
+    background-image:
+      linear-gradient(var(--color-bg-input), var(--color-bg-input)),
+      linear-gradient(
+        90deg,
+        var(--stream-base) 0%,
+        var(--stream-base) 20%,
+        var(--stream-c1) 42%,
+        var(--stream-c2) 52%,
+        var(--stream-c3) 62%,
+        var(--stream-base) 82%,
+        var(--stream-base) 100%
+      );
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12), var(--shadow-md);
   }
 
   @media (prefers-color-scheme: dark) {
     .header-input-group:focus-within {
-      box-shadow: 0 0 0 3px rgba(243, 244, 246, 0.12);
+      box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.18), var(--shadow-md);
     }
   }
 
@@ -343,6 +435,7 @@ const schemaJsonLd = {
   .header-search-input::placeholder {
     color: var(--color-text-placeholder);
     font-size: 0.85rem;
+    opacity: 1;
   }
 
   .header-submit-btn {
@@ -1019,6 +1112,31 @@ const schemaJsonLd = {
       flex-direction: column;
       gap: 0.75rem;
       text-align: center;
+    }
+  }
+
+  @keyframes border-stream-glow {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes border-stream-border {
+    0% {
+      background-position: 0 0, 200% 0;
+    }
+    100% {
+      background-position: 0 0, -200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .header-search-streamer .streamer-glow,
+    .header-input-group {
+      animation: none;
     }
   }
 </style>

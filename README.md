@@ -42,8 +42,8 @@ This repository hosts the **frontend**: an Astro application running on Cloudfla
 
 The site consists of two user-facing page types:
 
-1. **The Search Box** (`/`) — A minimalist, centered real-time search interface prerendered to static HTML at the edge.
-2. **The Answer Page** (`/q/<slug>-<id>`) — The canonical, indexable document for a specific question.
+1. **The Search Box** (`/`) — A minimalist, centered real-time search interface with a sunset streamer glow and `Real-time AI Search` placeholder, prerendered to static HTML at the edge.
+2. **The Answer Page** (`/q/<slug>-<id>`) — The canonical, indexable document for a specific question, equipped with the same streamer search bar in the header.
 
 A transitional route also exists: a lightweight `noindex` skeleton that the router renders while a brand-new answer is being synthesized.
 

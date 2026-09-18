@@ -33,11 +33,11 @@ jumyjumy-web
 #### Visual Layout
 - **Viewport Centering**: Centered vertically (optical golden ratio ~38vh - 42vh offset) and horizontally.
 - **Minimalist Branding**: Stylized `JumyJumy` logo with twin capitalized chromatic gradient `"J"` letters and crisp monochrome `"umy"` body text.
-- **Tagline**: `Real-time AI Search`
 - **Meta**: `<title>JumyJumy — Real-time AI Search</title>`; description `Real-time AI search. Ask anything and get a direct answer drawn from the live web, with cited sources.`
-- **Single Interactive Element (Search Box)**:
-  - Generous input box (Height $\approx 56\text{px}$, pill radius) with subtle hairline border and smooth focus ring.
-  - Placeholder: `Ask a question...`
+- **Single Interactive Element (Search Box with Streamer Effect)**:
+  - Compact pill-shaped input box (Height $\approx 46\text{px}$, pill radius) wrapped in `.search-box-streamer`.
+  - **Sunset Streamer Border Beam**: Animated gradient beam (Amber `#f59e0b` → Orange `#f97316` → Rose `#fb7185`) flowing seamlessly along the border with soft ambient glow (`.streamer-glow`).
+  - **Placeholder**: `Real-time AI Search` (replacing the old standalone tagline below the logo).
   - Right-aligned minimal action arrow button.
   - Autofocus enabled on desktop viewport.
 - **Footer**: Removed to keep the homepage purely minimal.
@@ -47,11 +47,10 @@ jumyjumy-web
 |                                                             |
 |                                                             |
 |                          JumyJumy                           |
-|                     Real-time AI Search                     |
 |                                                             |
-|        +-------------------------------------------+        |
-|        |  Ask a question...                 [ -> ] |        |
-|        +-------------------------------------------+        |
+|        +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+        |
+|        |  Real-time AI Search               [ -> ] |        |
+|        +~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~+        |
 |                                                             |
 |                                                             |
 |                                                             |
@@ -63,7 +62,7 @@ jumyjumy-web
 ### 2.2 Question Detail Page (`/q/<slug>-<id>`)
 
 #### Visual Layout
-- **Header**: Minimal single line with stylized brand logo `JumyJumy` linking back to `/`, plus an ask-box. The ask-box is **deliberately empty**, matching the homepage — it is the entry point for a new question, not an editor for the current one.
+- **Header**: Minimal single line with stylized brand logo `JumyJumy` linking back to `/`, plus a header ask-box. The ask-box features the same `Real-time AI Search` placeholder and Sunset streamer border beam (`.header-search-streamer`), deliberately empty to serve as the entry point for a new question.
 - **Main Container**: Optimal reading line length (`max-width: 720px`), centered with generous whitespace.
 - **Question Title**: `<h1>` in clean, strong typography ($28\text{px} \sim 36\text{px}$, font-weight: 700, line-height: 1.3).
 - **Metadata Row**: Publish/update date, reading time estimate, status badge.

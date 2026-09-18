@@ -41,7 +41,7 @@ If more binaries misbehave, do a clean `rm -rf node_modules && npm install` from
 
 ## What this is
 
-**Real-time AI Search** is the site's primary positioning: a visitor searches anything, the backend searches the live web, and the answer comes back with cited sources and an update time. User-facing copy (titles, meta descriptions, the homepage tagline `Real-time AI Search`, skeleton states) should say "live, sourced search", not "chatbot" or "Q&A forum". The default title and description live in `BaseLayout.astro`; the homepage passes the same pair explicitly.
+**Real-time AI Search** is the site's primary positioning: a visitor searches anything, the backend searches the live web, and the answer comes back with cited sources and an update time. User-facing copy (titles, meta descriptions, the search input placeholder `Real-time AI Search` with sunset streamer effect, skeleton states) should say "live, sourced search", not "chatbot" or "Q&A forum". The default title and description live in `BaseLayout.astro`; the homepage passes the same pair explicitly.
 
 Structurally it is an answer site built for Google indexing: two page types only — a homepage search box, and an answer detail page. A third route exists but is not a page type: a skeleton the detail route rewrites to while an answer is still being generated.
 

@@ -12,37 +12,40 @@ export const prerender = true
     <div class="search-wrapper">
       <header class="brand">
         <Logo as="h1" size="hero" class="brand-title" aria-label="JumyJumy" />
-        <p class="brand-tagline">Real-time AI Search</p>
       </header>
 
       <form class="ask-form" action="#" method="GET">
-        <div class="input-group">
-          <input
-            type="text"
-            name="q"
-            class="search-input"
-            required
-            autocomplete="off"
-            autofocus
-            aria-label="Search or ask anything"
-          />
-          <button type="submit" class="submit-btn" aria-label="Search">
-            <svg
-              class="arrow-icon"
-              viewBox="0 0 24 24"
-              width="20"
-              height="20"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M5 12h14"></path>
-              <path d="m12 5 7 7-7 7"></path>
-            </svg>
-          </button>
+        <div class="search-box-streamer">
+          <div class="streamer-glow" aria-hidden="true"></div>
+          <div class="input-group">
+            <input
+              type="text"
+              name="q"
+              class="search-input"
+              required
+              autocomplete="off"
+              autofocus
+              placeholder="Real-time AI Search"
+              aria-label="Search or ask anything"
+            />
+            <button type="submit" class="submit-btn" aria-label="Search">
+              <svg
+                class="arrow-icon"
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M5 12h14"></path>
+                <path d="m12 5 7 7-7 7"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </form>
     </div>
@@ -92,7 +95,7 @@ export const prerender = true
 
   .brand {
     text-align: center;
-    margin-bottom: 2.25rem;
+    margin-bottom: 2rem;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -102,50 +105,115 @@ export const prerender = true
   .brand-title {
     display: inline-flex;
     justify-content: center;
-    margin-bottom: 0.85rem;
     user-select: none;
-  }
-
-  .brand-tagline {
-    font-size: clamp(1.05rem, 2.2vw, 1.2rem);
-    font-weight: 450;
-    color: var(--color-text-secondary);
-    letter-spacing: -0.015em;
-    line-height: 1.4;
   }
 
   .ask-form {
     width: 100%;
   }
 
+  /* 流光搜索框容器与品牌渐变配色 */
+  .search-box-streamer {
+    --stream-c1: #f59e0b;
+    --stream-c2: #f97316;
+    --stream-c3: #fb7185;
+    --stream-glow-c1: rgba(245, 158, 11, 0.28);
+    --stream-glow-c2: rgba(249, 115, 22, 0.35);
+    --stream-glow-c3: rgba(251, 113, 133, 0.28);
+    --stream-base: var(--color-border);
+    position: relative;
+    width: 100%;
+    border-radius: var(--radius-full);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .search-box-streamer {
+      --stream-c1: #fbbf24;
+      --stream-c2: #fb923c;
+      --stream-c3: #f43f5e;
+      --stream-glow-c1: rgba(251, 191, 36, 0.25);
+      --stream-glow-c2: rgba(251, 146, 60, 0.32);
+      --stream-glow-c3: rgba(244, 63, 94, 0.25);
+    }
+  }
+
+  /* 柔和的环境流光弥散光晕 (Ambient Streamer Glow) */
+  .streamer-glow {
+    position: absolute;
+    inset: -2px;
+    border-radius: var(--radius-full);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      transparent 20%,
+      var(--stream-glow-c1) 42%,
+      var(--stream-glow-c2) 52%,
+      var(--stream-glow-c3) 62%,
+      transparent 82%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: border-stream-glow 4.5s linear infinite;
+    filter: blur(8px);
+    opacity: 0.45;
+    pointer-events: none;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+  }
+
+  .search-box-streamer:hover .streamer-glow {
+    opacity: 0.7;
+    filter: blur(10px);
+  }
+
+  .search-box-streamer:focus-within .streamer-glow {
+    opacity: 0.95;
+    filter: blur(12px);
+  }
+
   /* 紧凑精致的搜索条（高度约 46px），收敛视觉重量以保证上方 LOGO 的第一聚焦点地位 */
   .input-group {
     position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     width: 100%;
     min-height: 46px;
     background-color: var(--color-bg-input);
-    border: 1.5px solid var(--color-border);
     border-radius: var(--radius-full);
+    border: 1.5px solid transparent;
+    background-image:
+      linear-gradient(var(--color-bg-input), var(--color-bg-input)),
+      linear-gradient(
+        90deg,
+        var(--stream-base) 0%,
+        var(--stream-base) 20%,
+        var(--stream-c1) 42%,
+        var(--stream-c2) 52%,
+        var(--stream-c3) 62%,
+        var(--stream-base) 82%,
+        var(--stream-base) 100%
+      );
+    background-origin: padding-box, border-box;
+    background-clip: padding-box, border-box;
+    background-size: 100% 100%, 200% 100%;
+    background-repeat: no-repeat, repeat-x;
+    animation: border-stream-border 4.5s linear infinite;
     box-shadow: var(--shadow-sm);
-    transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     padding: 0.3rem 0.65rem 0.3rem 1.35rem;
   }
 
   .input-group:hover {
-    border-color: var(--color-border-hover);
     box-shadow: var(--shadow-md);
   }
 
   .input-group:focus-within {
-    border-color: var(--color-border-focus);
-    box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.08), var(--shadow-md);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12), var(--shadow-md);
   }
 
   @media (prefers-color-scheme: dark) {
     .input-group:focus-within {
-      box-shadow: 0 0 0 3px rgba(243, 244, 246, 0.12), var(--shadow-md);
+      box-shadow: 0 0 0 3px rgba(251, 146, 60, 0.18), var(--shadow-md);
     }
   }
 
@@ -160,6 +228,11 @@ export const prerender = true
     outline: none;
     padding: 0.2rem 0;
     margin-right: 0.5rem;
+  }
+
+  .search-input::placeholder {
+    color: var(--color-text-placeholder);
+    opacity: 1;
   }
 
   /* 彻底重置原生按钮样式，实现完全透明无框右箭头 */
@@ -224,6 +297,31 @@ export const prerender = true
     .arrow-icon {
       width: 16px;
       height: 16px;
+    }
+  }
+
+  @keyframes border-stream-glow {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes border-stream-border {
+    0% {
+      background-position: 0 0, 200% 0;
+    }
+    100% {
+      background-position: 0 0, -200% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .streamer-glow,
+    .input-group {
+      animation: none;
     }
   }
 </style>
