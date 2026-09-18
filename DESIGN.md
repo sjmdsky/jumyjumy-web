@@ -63,7 +63,7 @@ jumyjumy-web
 ### 2.2 Question Detail Page (`/q/<slug>-<id>`)
 
 #### Visual Layout
-- **Header**: Minimal single line with stylized brand logo `JumyJumy` linking back to `/`.
+- **Header**: Minimal single line with stylized brand logo `JumyJumy` linking back to `/`, plus an ask-box. The ask-box is **deliberately empty**, matching the homepage — it is the entry point for a new question, not an editor for the current one.
 - **Main Container**: Optimal reading line length (`max-width: 720px`), centered with generous whitespace.
 - **Question Title**: `<h1>` in clean, strong typography ($28\text{px} \sim 36\text{px}$, font-weight: 700, line-height: 1.3).
 - **Metadata Row**: Publish/update date, reading time estimate, status badge.
@@ -76,7 +76,7 @@ jumyjumy-web
 - **Authoritative Sources Section**:
   - Structured list under heading `Sources & References`.
   - Compact list with clean article titles and safe outbound links.
-- **Footer**: Clean return to home link (`← Return to Search`).
+- **Footer**: A 96px square brand mark above a clean return-to-home link (`← Return to Search`). The mark is a raster `<img>`, not the inline SVG logo, and that is load-bearing rather than an oversight — see "Social share cards" in `CLAUDE.md`: it is the only image in the DOM, and it is where WeChat takes the thumbnail for a forwarded link.
 
 ---
 
@@ -127,3 +127,7 @@ High-performance, zero-blocking modern system font stacks:
 2. **SEO**:
    - Valid Schema.org `QAPage` / `FAQPage` JSON-LD structured data on detail pages.
    - Semantic HTML5 tags (`<main>`, `<header>`, `<article>`, `<section>`, `<footer>`).
+   - `<meta name="description">` is distilled from the answer body, never a copy of the title — the two feed separate rows of a social card, and duplicating them wastes one.
+3. **Social sharing**:
+   - `og:*` and `twitter:card="summary"` (square image, so not `summary_large_image`) for Twitter / Slack / Feishu.
+   - A 600x600 brand tile at `/share-card.png`, present both as `og:image` and as a genuine in-body `<img>` — WeChat ignores `og:image` and picks from the DOM.

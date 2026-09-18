@@ -40,7 +40,7 @@
 
 ```text
 jumyjumy-web/
-├── public/                 # 静态资源 (favicon, robots.txt 等)
+├── public/                 # 静态资源 (favicon, robots.txt, _headers, share-card.png 等)
 ├── src/
 │   ├── components/         # 品牌与通用 UI 组件 (Logo.astro 等)
 │   ├── layouts/            # 页面骨架（HTML 头、SEO Meta、canonical、样式引用）
@@ -52,6 +52,7 @@ jumyjumy-web/
 │   │   ├── markdown.ts     # 默认转义、防 XSS 的 Markdown 渲染器（支持 GFM 表格与排版）
 │   │   ├── json-ld.ts      # 结构化数据内联转义（防 </script> 逃逸）
 │   │   ├── datetime.ts     # 时间戳格式化工具（支持访客本地时区）
+│   │   ├── excerpt.ts      # 答案 markdown 提炼为分享摘要（剥标记、丢结构块、按边界截断）
 │   │   └── types.ts        # 领域数据模型定义
 │   ├── pages/              # Astro 路由（index.astro, q/[slugId].astro, sitemap.xml.ts 等）
 │   └── styles/             # 全局极简 CSS 变量与 Typography 样式
@@ -112,6 +113,18 @@ jumyjumy-web/
 - **边缘显式缓存**：通过 Cloudflare Workers Cache API（`caches.default`）显式缓存 24 小时（`max-age=86400`）。缓存键严格去除查询参数，防止 query string 绕过打崩源站。只有 200 成功响应写入缓存，503 绝不缓存。
 - **安全转义**：XML 生成经 `escapeXml` 严密转义 `&`, `<`, `>`，防范异常标题注入破坏 XML 结构。
 - **爬虫内容信号**：`robots.txt` 用 Cloudflare Content Signals 表态 `search=yes, ai-input=yes, ai-train=no`。放行 ai-input 是刻意的——答案具时效性，被 AI 助手抓去当信源是本站的分发渠道而非泄漏；ai-train 保持拒绝，语料本身就是产品。该字段只是声明，真正的准入仍由 `Disallow` 控制。
+
+### 4.6 分享卡片契约 (`excerpt.ts`, `BaseLayout.astro`, `q/[slugId].astro`)
+
+链接被转发到社交平台时呈现的那张卡片有三栏：标题、摘要、缩略图。三条约束各防一件事，改动前先读完。
+
+- **摘要必须来自答案正文，绝不回落到标题。** 卡片的标题与摘要是上下两栏，喂同一句话进去就是同一行文字重复两遍。`buildExcerpt` 返回空串时交给 `BaseLayout` 的站点默认文案，**不是** `question.title`。
+- **微信不读 `og:image`，它从正文 DOM 里挑一张真实图片。** 因此 `q/[slugId].astro` 页脚那个 `<img>` 是功能性元素，不是装饰——在它之前全站渲染出的 HTML 里一张图都没有（Logo 是内联 SVG），卡片只有一块灰底。由此派生三条硬约束：**必须真的渲染出来**（`display:none` 会被跳过）、**不加 `loading="lazy"`**、**页面上不得出现第二个图片标签，注释里也不要写出那五个字符**（按字符串扫描的挑图逻辑会先撞上它然后发现没有 src）。
+- **配图必须是方形 PNG 且自带背景。** 方形是因为微信在单聊、群聊、朋友圈三处都把缩略图裁成方的，宽幅字标会被从中间裁掉两头；PNG 是因为微信的缩略图不接受 SVG；自带深色底是因为一个 `<img>` 只有一份位图、跟不了 `prefers-color-scheme`，透明底的字标必定在某一种主题下消失——`logo.svg` 与 `logo-dark.svg` 分成两份文件本身就是这个问题的证据。
+
+`excerpt.ts` 的剥除规则有一条刻意的不对称：行内标记（粗体、行内代码、链接）保留文字去掉符号，而纯结构内容（围栏代码块、表格）整段丢弃——150 字符里塞一段 sysctl 命令或半张管道网格，卡片看上去就是坏的。表格识别锚在**分隔行**上而不是竖线本身，与 `markdown.ts` 的 `splitTableRow` 保持一致（它支持省略首尾竖线），否则渲染器认账的那一半表格会漏进摘要。句末判定必须对着**完整文本**做而不是截断后的片段，否则 `4.9` 的点只要落在截断点上就会被当成句末。
+
+`public/share-card.png` 不带内容指纹，`_headers` 给它一周缓存。换图后各家抓取方与浏览器手里的旧副本最长一周才失效，这是刻意接受的代价——它几乎不变，而它一旦变了本来也不是秒级生效的东西。
 
 ---
 
@@ -187,3 +200,4 @@ npx vitest run --coverage   # 覆盖率（scoped to src/lib/**）
 - [ ] 触及渲染路径时，§4.3 三道安全防线未被削弱。
 - [ ] 触及 `/q/` 路由时，404 / 502 / 301 四种响应语义未被混淆。
 - [ ] 页面结构符合极简设计要求（首页单搜索框，问答页高效易读）。
+- [ ] 触及 `q/[slugId].astro` 或 `BaseLayout.astro` 时，§4.6 的分享卡片三条约束未被削弱——尤其别把页脚那个 `<img>` 当装饰删掉或改成 SVG。

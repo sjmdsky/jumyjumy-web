@@ -33,6 +33,7 @@
 - **🗺️ 边缘缓存动态 Sitemap (Edge-Cached Dynamic Sitemap)**：`/sitemap.xml` 经 Cloudflare Cache API 边缘缓存 24 小时；取数失败一律返回真实 `503`，绝不用空 `200` 文档掩盖故障；对上游分页游标做严格校验，宁可整份失败也不静默截断。
 - **⏳ 零等待骨架路由机制 (Zero-Latency Skeleton Routing)**：新问题请求即刻返回 `noindex` 骨架屏，将 TTFB 与上游模型推理耗时彻底解耦；同时阻止搜索引擎爬虫触发高昂的模型计算开销。
 - **🛡️ 纵深防御基线 (Defense-in-Depth Security)**：权威信源严格协议白名单（仅限 `http`/`https`）、Markdown 默认转义防 XSS 注入、结构化数据 (JSON-LD) 防 `</script>` 逃逸攻击。
+- **📱 如实的分享卡片 (Truthful Share Cards)**：链接被转发时呈现为真实卡片而非一串裸 URL。摘要由答案正文提炼而来（绝不复用标题——那会让卡片上下两栏重复同一句话）；方形品牌砖同时作为 `og:image` 与正文里一个真实的 `<img>` 提供，因为微信的缩略图取自 DOM，根本不读 `og:image`。
 - **📦 零外部依赖的领域核心 (Pure Domain Core)**：`src/lib/` 内部纯函数设计、零外部运行时依赖、与运行时解耦，配备高覆盖率的纯单测保障。
 
 ---
@@ -177,7 +178,9 @@ npm run dev
 jumyjumy-web/
 ├── public/
 │   ├── .assetsignore             # 极重要: 强制 Worker 静态资源排除 _worker.js 服务端产物
+│   ├── _headers                  # 静态资源缓存策略，由 Workers 消费，本身不对外提供
 │   ├── favicon.svg               # 站点图标
+│   ├── share-card.png            # 600x600 品牌砖：og:image 与微信缩略图的来源
 │   └── robots.txt                # 搜索引擎爬虫协议规则
 ├── src/
 │   ├── components/               # 品牌视觉与全局 UI 组件 (如 Logo.astro)
@@ -190,6 +193,7 @@ jumyjumy-web/
 │   │   ├── markdown.ts           # 默认转义的高安全 Markdown 渲染器 (支持 GFM 表格)
 │   │   ├── json-ld.ts            # 安全转义的结构化数据嵌入工具 (防 script 逃逸)
 │   │   ├── datetime.ts           # 客户端与服务端统一的时间戳本地化格式化工具
+│   │   ├── excerpt.ts            # 答案 markdown 提炼为分享摘要，按句末/词边界截断
 │   │   └── types.ts              # 领域模型定义 (所有字段均为 readonly 不可变)
 │   ├── pages/
 │   │   ├── index.astro           # 首页搜索框 (预渲染静态资源)

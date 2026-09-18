@@ -33,6 +33,7 @@ This repository hosts the **frontend**: an Astro application running on Cloudfla
 - **🗺️ Edge-Cached Dynamic Sitemap**: Serves `/sitemap.xml` with Cloudflare Cache API (24h edge TTL), truthful `503` fail-safe semantics (never masking failures with empty `200` documents), and strict pagination validation.
 - **⏳ Zero-Latency Skeleton Routing**: New model queries instantly render a `noindex` skeleton on the client side, isolating TTFB from AI generation latency and stopping search bots from triggering costly LLM runs.
 - **🛡️ Defense-in-Depth Security**: Strict protocol whitelisting (`http`/`https` only), default-escaped Markdown parsing, and script-tag injection guards on JSON-LD structured data.
+- **📱 Truthful Share Cards**: A forwarded link renders a real card, not a bare URL. The description is distilled from the answer body (never a copy of the title), and a square brand tile ships both as `og:image` and as a genuine in-body `<img>` — WeChat picks its thumbnail from the DOM and ignores `og:image` entirely.
 - **📦 Pure Domain Core**: `src/lib/` is completely pure, dependency-free, runtime-agnostic, and thoroughly unit-tested.
 
 ---
@@ -177,7 +178,9 @@ Environment variables are declared in `astro.config.mjs` via `astro:env` and con
 jumyjumy-web/
 ├── public/
 │   ├── .assetsignore             # CRITICAL: Excludes _worker.js from public static assets
+│   ├── _headers                  # Asset cache policy — consumed by Workers, never served
 │   ├── favicon.svg               # Site icon
+│   ├── share-card.png            # 600x600 brand tile: og:image + WeChat thumbnail source
 │   └── robots.txt                # Crawler directives & sitemap declaration
 ├── src/
 │   ├── components/               # Brand & shared UI components (Logo.astro, etc.)
@@ -190,6 +193,7 @@ jumyjumy-web/
 │   │   ├── markdown.ts           # Safe GFM markdown renderer with table support
 │   │   ├── json-ld.ts            # Safe inline JSON-LD generator (anti-XSS)
 │   │   ├── datetime.ts           # Client & server unified timestamp formatter
+│   │   ├── excerpt.ts            # Answer markdown -> share description, boundary-aware truncation
 │   │   └── types.ts              # Readonly domain type definitions
 │   ├── pages/
 │   │   ├── index.astro           # The search box (prerendered static HTML)
