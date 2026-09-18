@@ -131,19 +131,18 @@ const schemaJsonLd = {
         <Logo size="header" />
       </a>
 
-      <!-- 顶部更长更舒适的搜索框，预填充当前问题标题方便编辑修改 -->
+      <!-- 顶部搜索框。刻意留空，与首页一致：这里是提新问题的入口，不是改这一题的入口 -->
       <form class="header-search-form" action="#" method="GET">
         <div class="header-input-group">
           <input
             type="text"
             name="q"
             class="header-search-input"
-            value={question.title}
             required
             autocomplete="off"
-            aria-label="Ask or edit question"
+            aria-label="Search or ask anything"
           />
-          <button type="submit" class="header-submit-btn" aria-label="Submit revised question">
+          <button type="submit" class="header-submit-btn" aria-label="Search">
             <svg
               class="header-arrow-icon"
               viewBox="0 0 24 24"
