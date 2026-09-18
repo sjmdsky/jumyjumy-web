@@ -6,6 +6,7 @@ import { renderAnswer } from '../../lib/markdown'
 import { fetchQuestion, resolveCanonicalRedirect } from '../../lib/api'
 import { toInlineJsonLd } from '../../lib/json-ld'
 import { formatTimestamp } from '../../lib/datetime'
+import { buildExcerpt } from '../../lib/excerpt'
 import { API_BASE_URL, GATEWAY_TOKEN } from 'astro:env/server'
 
 const slugId = Astro.params.slugId ?? ''
@@ -66,6 +67,31 @@ Astro.response.headers.set(
 
 const renderedContent = renderAnswer(question.answerMarkdown)
 
+// 分享卡片的摘要取答案正文，不取标题。微信卡片的标题与摘要是上下两栏，喂同一
+// 句话进去，转发出去就是同一行文字重复两遍——这正是改动前的样子。
+// 答案缺失时给 undefined，让 BaseLayout 回落到站点默认文案；**不回落到标题**，
+// 那会把刚消掉的重复又带回来。
+const shareDescription = buildExcerpt(question.answerMarkdown) || undefined
+
+// 页脚那张 share-card.png 是功能性元素，不是装饰。它是方形品牌砖——
+// icon.svg 的圆角深色底加 logo-dark.svg 的完整字标，取值理由见 BaseLayout。
+//
+// 微信的链接卡片缩略图是从正文 DOM 里挑一张真实图片，它不读 og:image——而在
+// 这张图加进来之前，全站渲染出的 HTML 里一张图都没有（Logo 是内联 SVG），
+// 所以转发出去的卡片只有一块灰底。
+//
+// 由这个用途派生出三条约束，改动前先读完：
+//   1. 必须真的渲染出来。设成 display:none 的图微信会跳过。
+//   2. 不加 loading="lazy"。缩略图能不能被取到是这次改动的全部目的，不值得
+//      为省 8 KB 去赌一条没有文档、还随版本变的启发式。
+//   2b. 必须是 PNG，不能直接引 logo.svg：微信的缩略图不接受 SVG，而单份位图
+//      也跟不了主题切换。页面上看到的是同一个字标，只是栅格化并带上了底。
+//   2c. 渲染尺寸别再调小。字标在 96px 上刚好读得出，再小就只剩一团色块，
+//      而「能读出名字」正是用完整字标而非 JJ 图标的理由。
+//   3. 页面上不要出现第二个图片标签，也不要在注释里写出那五个字符——
+//      按字符串扫描的挑图逻辑会先撞上它，然后发现没有 src。
+// 源文件是 600x600，微信取的是源文件，跟它在页面上渲染成多大无关。
+
 // 服务端渲染 UTC，客户端脚本再换成访客本地时区（见 lib/datetime.ts）。
 const updatedIso = new Date(question.updatedAt).toISOString()
 const updatedLabel = formatTimestamp(question.updatedAt)
@@ -92,7 +118,7 @@ const schemaJsonLd = {
 
 <BaseLayout
   title={`${question.title} — JumyJumy`}
-  description={question.title}
+  description={shareDescription}
   noindex={!indexable}
   canonicalUrl={canonicalUrl}
 >
@@ -190,6 +216,15 @@ const schemaJsonLd = {
 
   <footer class="detail-footer">
     <div class="footer-inner">
+      <!-- 功能性元素，不是装饰：微信的卡片缩略图取自这里。理由见 frontmatter -->
+      <img
+        src="/share-card.png"
+        alt="JumyJumy"
+        width="96"
+        height="96"
+        class="footer-mark"
+        decoding="async"
+      />
       <a href="/" class="back-home-link">← Return to Search</a>
     </div>
   </footer>
@@ -849,10 +884,19 @@ const schemaJsonLd = {
     max-width: 760px;
     margin: 0 auto;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 1.25rem;
     font-size: 0.875rem;
     color: var(--color-text-secondary);
+  }
+
+  /* 图自带圆角深色底，不要再加边框或圆角，会叠出双层。 */
+  .footer-mark {
+    display: block;
+    width: 96px;
+    height: 96px;
   }
 
   .back-home-link {

@@ -21,9 +21,15 @@ const requestedUrl = new URL(encodePath(`/q/${query}`), Astro.site || 'https://e
 
 // 骨架页的内容随时会变成答案页，不允许任何一层缓存。
 Astro.response.headers.set('cache-control', 'private, no-store')
+
+// 不给 BaseLayout 传 description，让它回落到站点默认文案。
+//
+// 这一页 noindex 且 no-store，但它照样会被转发：用户在 location.replace 生效
+// 之前复制地址栏，发出去的就是这个 URL，微信仍会来抓。原先这里传的是提问原文，
+// 与 title 同一句，卡片上下两栏重复两遍——规范页刚修掉的毛病，骨架页不该再犯。
 ---
 
-<BaseLayout title={`${query} — JumyJumy`} description={query} noindex={true} canonicalUrl={requestedUrl}>
+<BaseLayout title={`${query} — JumyJumy`} noindex={true} canonicalUrl={requestedUrl}>
   <header class="detail-header">
     <div class="header-inner">
       <a href="/" class="brand-link" aria-label="JumyJumy Home">

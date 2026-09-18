@@ -2,3 +2,9 @@
 # /_astro/ 下的所有静态资源（JS/CSS/WebFont）均带有内容指纹 Hash，内容不可变，配置 1 年强缓存
 /_astro/*
   Cache-Control: public, max-age=31536000, immutable
+
+# 分享卡片配图。不在 /_astro/ 下，没有内容指纹，所以不能套上面那条 immutable：
+# 换图时旧副本得能在可接受的时间内过期。一周是折中——它几乎不变，而它一旦变了，
+# 微信和各家 og 消费者手里的缓存也不会立刻跟上，本来就不是秒级生效的东西。
+/share-card.png
+  Cache-Control: public, max-age=604800

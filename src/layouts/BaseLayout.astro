@@ -1,21 +1,59 @@
 ---
 import '../styles/global.css'
 
+/**
+ * 分享卡片的配图：600x600 的方形品牌砖，内容是 icon.svg 的圆角深色底加上
+ * logo-dark.svg 的完整字标。
+ *
+ * 三个取值都不是随意的：
+ *   - **方形**：微信在单聊、群聊、朋友圈三处都把缩略图裁成方的，宽幅字标
+ *     会被从中间裁掉两头。
+ *   - **PNG 而不是直接引那两个 SVG**：微信的缩略图不接受 SVG。
+ *   - **自带深色底**：一个 <img> 只有一份位图，跟不了 prefers-color-scheme。
+ *     透明底的字标 PNG 必定在某一种主题下消失——logo.svg 与 logo-dark.svg
+ *     分成两份文件，正是因为字标本身不是主题无关的。
+ *
+ * 它喂的是两套互不相通的机制：og:image 给 Twitter / Slack / 飞书这类读 meta
+ * 的消费者；而微信不读 og:image，它从正文 DOM 里挑图——那张真实的 <img> 由
+ * 页面自己放（见 pages/q/[slugId].astro 的页脚品牌块），不在这一层。
+ *
+ * 尺寸写成常量而不是运行时读文件：og:image:width/height 的作用是让抓取方在
+ * 图片下载完之前就能排好版，写错比不写更糟，所以它必须跟着
+ * public/share-card.png 一起改。
+ */
+const SHARE_CARD_PATH = '/share-card.png'
+const SHARE_CARD_SIZE = '600'
+
+/**
+ * 微信的链接卡片只读 title 加 meta[name=description] 这两个字段，不读 og:*。
+ * 所以它们必须各自成立：description 一旦回落成标题，转发出去的卡片就是同一句
+ * 话上下重复两遍。og 那一组是给 Twitter / Slack / 飞书的，留着有价值，但它
+ * 解决不了微信。
+ */
+const SITE_NAME = 'JumyJumy'
+const DEFAULT_DESCRIPTION =
+  'Real-time AI search. Ask anything and get a direct answer drawn from the live web, with cited sources.'
+
 interface Props {
   title?: string
   description?: string
   noindex?: boolean
   canonicalUrl?: string
+  image?: string
 }
 
 const {
   title = 'JumyJumy — Real-time AI Search',
-  description = 'Real-time AI search. Ask anything and get a direct answer drawn from the live web, with cited sources.',
+  description = DEFAULT_DESCRIPTION,
   noindex = false,
   canonicalUrl,
+  image = SHARE_CARD_PATH,
 } = Astro.props
 
-const resolvedCanonical = canonicalUrl || new URL(Astro.url.pathname, Astro.site || 'https://example.com').href
+const siteOrigin = Astro.site || 'https://example.com'
+const resolvedCanonical = canonicalUrl || new URL(Astro.url.pathname, siteOrigin).href
+// 绝对 URL：og:image 与 twitter:image 的消费者都不解析相对路径。
+const resolvedImage = new URL(image, siteOrigin).href
 ---
 
 <!doctype html>
@@ -31,9 +69,20 @@ const resolvedCanonical = canonicalUrl || new URL(Astro.url.pathname, Astro.site
 
     <!-- Open Graph / SEO -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={resolvedCanonical} />
+    <meta property="og:image" content={resolvedImage} />
+    <meta property="og:image:width" content={SHARE_CARD_SIZE} />
+    <meta property="og:image:height" content={SHARE_CARD_SIZE} />
+    <meta property="og:image:alt" content={SITE_NAME} />
+
+    <!-- summary：配图是方的，summary_large_image 会把它裁成一条 -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={resolvedImage} />
 
     <!-- Favicon -->
     <link rel="icon" href="/favicon.ico" sizes="32x32" />

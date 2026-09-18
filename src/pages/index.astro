@@ -6,10 +6,8 @@ import Logo from '../components/Logo.astro'
 export const prerender = true
 ---
 
-<BaseLayout
-  title="JumyJumy — Real-time AI Search"
-  description="Real-time AI search. Ask anything and get a direct answer drawn from the live web, with cited sources."
->
+<!-- 不传 description：BaseLayout 的 DEFAULT_DESCRIPTION 就是这一句，抄一份只会各自漂移 -->
+<BaseLayout title="JumyJumy — Real-time AI Search">
   <main class="home-container">
     <div class="search-wrapper">
       <header class="brand">
